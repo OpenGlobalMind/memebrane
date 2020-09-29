@@ -1,5 +1,6 @@
 from flask import Flask, redirect, render_template
 import requests
+import json
 
 app = Flask(__name__)
 app.config['FLASK_DEBUG'] = True
@@ -32,11 +33,12 @@ def get_thought_route(thought_id=None):
     root = t['root']
     return render_template(
         'index.html',
+        json = json.dumps(t, indent=4),
         this_id = thought_id,
         names = names,
         parents = root['parents'],
         siblings = root['siblings'],
         jumps = root['jumps'],
         children = root['children'],
-        attachments = root['attachments'],
+        attachments = t['attachments'],
     )

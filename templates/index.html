@@ -31,6 +31,21 @@
 	<a href="/thought/{{ jump }}">{{ names[jump] }}</a>
 	{% endfor %}
       </p>
+      <p>
+	Attachments:
+	{% for attachment in attachments %}
+	<p>
+	  <div><span style="font-weight: bold">{{ attachment['name'] }}</span>
+	    {% if attachment['type'] == 3 %}(link){% else %}(type {{ attachment['type'] }}){% endif %}</div>
+	  <div><a href="{{ attachment['location'] }}">{{ attachment['location'] }}</a></div>
+	</p>
+	{% endfor %}
+      </p>
+      <p>
+	JSON:
+	<pre>
+	  {{ json }}
+	</pre>
     </div>
   </body>
 </html>
