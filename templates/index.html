@@ -1,36 +1,62 @@
 <html>
   <body>
-    <div><a href="/">[Home]</a></div>
+    <div><a href="/thought/{{ home_thought_id }}{{ show_query_string }}">[Home]</a></div>
     <div>
       <p>
 	Parents:
 	{% for parent in parents %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/thought/{{ parent }}">{{ names[parent] }}</a>
+	<a href="/thought/{{ parent }}{{ show_query_string }}">{{ names[parent] }}</a>
 	{% endfor %}
       </p>
       <h1>{{ names[this_id] }}</h1>
-      <p>
-	Siblings:
-	{% for sibling in siblings %}
-	{% if loop.index > 1 %} - {% endif %}
-	<a href="/thought/{{ sibling }}">{{ names[sibling] }}</a>
-	{% endfor %}
-      </p>
+      {% if 'siblings' in show %}
+	<p>
+	  Siblings:
+	  {% for sibling in siblings %}
+	  {% if loop.index > 1 %} - {% endif %}
+	  <a href="/thought/{{ sibling }}{{ show_query_string }}">{{ names[sibling] }}</a>
+	  {% endfor %}
+	</p>
+      {% endif %}
       <p>
 	Children:
 	{% for child in children %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/thought/{{ child }}">{{ names[child] }}</a>
+	<a href="/thought/{{ child }}{{ show_query_string }}">{{ names[child] }}</a>
 	{% endfor %}
       </p>
       <p>
 	Jumps:
 	{% for jump in jumps %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/thought/{{ jump }}">{{ names[jump] }}</a>
+	<a href="/thought/{{ jump }}{{ show_query_string }}">{{ names[jump] }}</a>
 	{% endfor %}
       </p>
+      <p>
+	Notes:
+	<div style="margin: 1em 0 1em 2.5em">
+	  {{ notes_html|safe }}
+	</div>
+      </p>
+      <p>
+	Attachments:
+	{% for attachment in attachments %}
+	<div style="margin: 1em 0 1em 2.5em">
+	  <div><span style="font-weight: bold">{{ attachment['name'] }}</span>
+	    {% if attachment['type'] == 3 %}(link){% else %}(type {{ attachment['type'] }}){% endif %}</div>
+	  <div><a href="{{ attachment['location'] }}">{{ attachment['location'] }}</a></div>
+	</div>
+	{% endfor %}
+      </p>
+      {% if 'json' in show %}
+	<p>
+	  JSON:
+	  <pre>
+	    {{ json }}
+	  </pre>
+	</p>
+      {% endif %}
     </div>
   </body>
 </html>

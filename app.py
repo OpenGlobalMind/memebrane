@@ -1,5 +1,6 @@
-from flask import Flask, redirect, render_template
+from flask import Flask, redirect, render_template, request
 import requests
+import json
 
 app = Flask(__name__)
 app.config['FLASK_DEBUG'] = True
@@ -22,6 +23,14 @@ def home():
 def get_thought_route(thought_id=None):
     t = get_thought(thought_id)
 
+    # get show args
+    show = request.args.get('show')
+    if show:
+        show_query_string = '?show={}'.format(show)
+    else:
+        show = ''
+        show_query_string = ''
+
     # create a lookup table of names by thought_id
     thoughts = t['thoughts']
     names = {}
@@ -32,11 +41,16 @@ def get_thought_route(thought_id=None):
     root = t['root']
     return render_template(
         'index.html',
+        json = json.dumps(t, indent=4),
+        show = show,
+        show_query_string = show_query_string,
+        home_thought_id = home_thought_id,
         this_id = thought_id,
         names = names,
         parents = root['parents'],
         siblings = root['siblings'],
         jumps = root['jumps'],
         children = root['children'],
-        attachments = root['attachments'],
+        attachments = t['attachments'],
+        notes_html = t['notesHtml'],
     )

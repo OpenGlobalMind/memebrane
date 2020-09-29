@@ -29,15 +29,28 @@ Run application:
 flask run
 ```
 
+## Usage
+
 Visit the application at http://localhost:5000/
+
+By default, “siblings” and the full JSON thought object are not displayed.
+
+Add one of these query strings to the URL to display siblings or the full JSON:
+
+```
+?show=json
+?show=siblings
+?show=json,siblings
+```
+
+Remove the `?show=` component from the URL to hide those sections again.
 
 ## Possible Future Enhancements
 
 * allow user to enter `brain_id` and `home_thought_id`
 * add CSS and better web page layout
 * add caching of retrieved thoughts
-* show/hide Siblings
-* show/hide JSON representation of thoughts
+* do show/hide client side, rather than server side
 * add “bread crumb” trail of visited thoughts
-* display more parts of thoughts - description, attachments, URLs, etc.
+* do better with attachments that aren’t type 3
 
