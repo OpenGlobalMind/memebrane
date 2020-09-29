@@ -12,7 +12,6 @@
       <h1>{{ names[this_id] }}</h1>
       <p>
 	Siblings:
-	{% set i = 0 %}
 	{% for sibling in siblings %}
 	{% if loop.index > 1 %} - {% endif %}
 	<a href="/thought/{{ sibling }}">{{ names[sibling] }}</a>
@@ -20,7 +19,6 @@
       </p>
       <p>
 	Children:
-	{% set i = 0 %}
 	{% for child in children %}
 	{% if loop.index > 1 %} - {% endif %}
 	<a href="/thought/{{ child }}">{{ names[child] }}</a>
@@ -28,7 +26,6 @@
       </p>
       <p>
 	Jumps:
-	{% set i = 0 %}
 	{% for jump in jumps %}
 	{% if loop.index > 1 %} - {% endif %}
 	<a href="/thought/{{ jump }}">{{ names[jump] }}</a>
