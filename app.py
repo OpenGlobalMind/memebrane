@@ -17,7 +17,10 @@ home_brain = {
 
 def get_thought(brain_id, thought_id):
     r = requests.get('https://api.thebrain.com/api-v11/brains/' + brain_id + '/thoughts/' + thought_id + '/graph')
-    return r.json()
+    try:
+        return r.json()
+    except Exception as e:
+        return None
 
 @app.route("/")
 def home():
@@ -50,6 +53,12 @@ def url():
 @app.route("/brain/<brain_id>/thought/<thought_id>")
 def get_thought_route(brain_id=None, thought_id=None):
     t = get_thought(brain_id, thought_id)
+    if t is None:
+      return render_template(
+          'get-thought-error.html',
+          brain_id = brain_id,
+          thought_id = thought_id
+      )
 
     # get show args
     show = request.args.get('show')
