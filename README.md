@@ -33,7 +33,7 @@ Visit the application at http://localhost:5000/
 
 ## Possible Future Enhancements
 
-* parameterize `brain_id` and `home_thought_id`
+* allow user to enter `brain_id` and `home_thought_id`
 * add CSS and better web page layout
 * add caching of retrieved thoughts
 * show/hide Siblings
