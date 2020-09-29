@@ -8,20 +8,23 @@ app.config['STATIC_FOLDER'] = '/static'
 app.config['TEMPLATES_FOLDER'] = '/templates'
 
 # Configure these as appropriate. The default values are for Jerry Michalski's TheBrain.
-brain_id = '3d80058c-14d8-5361-0b61-a061f89baf87'
-home_thought_id = '32f9fc36-6963-9ee0-9b44-a89112919e29'
+home_brain = {
+    'name': "Jerry's Brain",
+    'brain': '3d80058c-14d8-5361-0b61-a061f89baf87',
+    'thought': '32f9fc36-6963-9ee0-9b44-a89112919e29'
+}
 
-def get_thought(thought_id):
+def get_thought(brain_id, thought_id):
     r = requests.get('https://api.thebrain.com/api-v11/brains/' + brain_id + '/thoughts/' + thought_id + '/graph')
     return r.json()
 
 @app.route("/")
 def home():
-    return redirect('/thought/' + home_thought_id, code=302)
+    return redirect('/brain/' + home_brain['brain'] + '/thought/' + home_brain['thought'], code=302)
 
-@app.route("/thought/<thought_id>")
-def get_thought_route(thought_id=None):
-    t = get_thought(thought_id)
+@app.route("/brain/<brain_id>/thought/<thought_id>")
+def get_thought_route(brain_id=None, thought_id=None):
+    t = get_thought(brain_id, thought_id)
 
     # get show args
     show = request.args.get('show')
@@ -44,7 +47,8 @@ def get_thought_route(thought_id=None):
         json = json.dumps(t, indent=4),
         show = show,
         show_query_string = show_query_string,
-        home_thought_id = home_thought_id,
+        home_brain = home_brain,
+        brain_id = brain_id,
         this_id = thought_id,
         names = names,
         parents = root['parents'],

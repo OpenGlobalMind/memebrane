@@ -1,12 +1,18 @@
 <html>
   <body>
-    <div><a href="/thought/{{ home_thought_id }}{{ show_query_string }}">[Home]</a></div>
+    <div>
+      <form method="post" action="/">
+	Start with <a href="/brain/{{ home_brain['brain'] }}/thought/{{ home_brain['thought'] }}{{ show_query_string }}">[{{ home_brain['name'] }}]</a>
+	or a web brain URL: <input type="text" size="40"> <input type="submit" value="Go">
+      </form>
+    </div>
+    <hr>
     <div>
       <p>
 	Parents:
 	{% for parent in parents %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/thought/{{ parent }}{{ show_query_string }}">{{ names[parent] }}</a>
+	<a href="/brain/{{ brain_id }}/thought/{{ parent }}{{ show_query_string }}">{{ names[parent] }}</a>
 	{% endfor %}
       </p>
       <h1>{{ names[this_id] }}</h1>
@@ -15,7 +21,7 @@
 	  Siblings:
 	  {% for sibling in siblings %}
 	  {% if loop.index > 1 %} - {% endif %}
-	  <a href="/thought/{{ sibling }}{{ show_query_string }}">{{ names[sibling] }}</a>
+	  <a href="/brain/{{ brain_id }}/thought/{{ sibling }}{{ show_query_string }}">{{ names[sibling] }}</a>
 	  {% endfor %}
 	</p>
       {% endif %}
@@ -23,14 +29,14 @@
 	Children:
 	{% for child in children %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/thought/{{ child }}{{ show_query_string }}">{{ names[child] }}</a>
+	<a href="/brain/{{ brain_id }}/thought/{{ child }}{{ show_query_string }}">{{ names[child] }}</a>
 	{% endfor %}
       </p>
       <p>
 	Jumps:
 	{% for jump in jumps %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/thought/{{ jump }}{{ show_query_string }}">{{ names[jump] }}</a>
+	<a href="/brain/{{ brain_id }}/thought/{{ jump }}{{ show_query_string }}">{{ names[jump] }}</a>
 	{% endfor %}
       </p>
       <p>
