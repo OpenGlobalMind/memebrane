@@ -1,6 +1,7 @@
 from flask import Flask, redirect, render_template, request
 import requests
 import json
+import re
 
 app = Flask(__name__)
 app.config['FLASK_DEBUG'] = True
@@ -21,6 +22,30 @@ def get_thought(brain_id, thought_id):
 @app.route("/")
 def home():
     return redirect('/brain/' + home_brain['brain'] + '/thought/' + home_brain['thought'], code=302)
+
+@app.route("/url", methods=['POST'])
+def url():
+    u = request.form['url'];
+
+    # TODO: support URLs of the form https://webbrain.com/brainpage/brain/BED8187E-FD1C-CE55-E236-871DD7E1DF32#-6975
+
+    # resolve shortened URL
+    if u.startswith('https://bra.in/'):
+        r = requests.get(u)
+        u = r.url
+
+    # check for reasonable URL
+    if u.startswith('https://app.thebrain.com/'):
+        pattern = re.compile(r'https://app.thebrain.com/brains/(?P<brain_id>[^/]+)/thoughts/(?P<thought_id>[^/]+)')
+        match = pattern.match(u)
+        if match is not None:
+            return redirect('/brain/' + match.group('brain_id') + '/thought/' + match.group('thought_id'), code=302)
+
+    # no joy
+    return render_template(
+        'url-error.html',
+        bad_url = u
+    )
 
 @app.route("/brain/<brain_id>/thought/<thought_id>")
 def get_thought_route(brain_id=None, thought_id=None):
@@ -44,7 +69,7 @@ def get_thought_route(brain_id=None, thought_id=None):
     root = t['root']
     return render_template(
         'index.html',
-        json = json.dumps(t, indent=4),
+        json = json.dumps(t, indent=2),
         show = show,
         show_query_string = show_query_string,
         home_brain = home_brain,

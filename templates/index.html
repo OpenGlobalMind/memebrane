@@ -1,9 +1,12 @@
 <html>
+  <head>
+    <title>MemeBrane: {{ names[this_id] }}</title>
+  </head>
   <body>
     <div>
-      <form method="post" action="/">
+      <form method="post" action="/url">
 	Start with <a href="/brain/{{ home_brain['brain'] }}/thought/{{ home_brain['thought'] }}{{ show_query_string }}">[{{ home_brain['name'] }}]</a>
-	or a web brain URL: <input type="text" size="40"> <input type="submit" value="Go">
+	or a web brain URL: <input type="text" name="url" size="40"> <input type="submit" value="Go">
       </form>
     </div>
     <hr>
@@ -59,7 +62,7 @@
 	<p>
 	  JSON:
 	  <pre>
-	    {{ json }}
+{{ json }}
 	  </pre>
 	</p>
       {% endif %}
