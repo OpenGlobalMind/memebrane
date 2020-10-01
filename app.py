@@ -6,6 +6,7 @@ from flask import Flask, redirect, render_template, request, Response
 from flask_sqlalchemy import SQLAlchemy
 import requests
 
+from models.models import Node
 from models.utils import get_brain, get_node, add_brain
 
 config = ConfigParser()
@@ -30,6 +31,31 @@ def home():
 
 BRAIN_URL_RE = re.compile(
     r'https://app.thebrain.com/brains/(?P<brain_id>[^/]+)/thoughts/(?P<thought_id>[^/]+)')
+
+
+@app.route("/brain/<brain_slug>/search")
+def search(brain_slug):
+    brain = get_brain(db.session, brain_slug)
+    if not brain:
+        return Response("No such brain", status=404)
+    terms = request.args.get('query', None)
+    limit = int(request.args.get('limit', 10))
+    start = int(request.args.get('start', 0))
+    if not terms:
+        return Response("Please add a ?query parameter", status=400)
+    nodes = db.session.query(Node.id, Node.name).filter(
+        (Node.brain == brain) & (Node.name.match(terms))
+        ).offset(start).limit(limit).all()
+    prev_link = next_link = None
+    if len(nodes) == limit:
+        next_start = start + limit
+        next_link = f"/brain/{brain_slug}/search?start={next_start}&limit={limit}&query={terms}"
+    if start > 0:
+        prev_start = max(0, start - limit)
+        prev_link = f"/brain/{brain_slug}/search?start={prev_start}&limit={limit}&query={terms}"
+    return render_template(
+        "search_results.html", nodes=nodes, brain=brain, query=terms,
+        start=start+1, prev_link=prev_link, next_link=next_link)
 
 
 @app.route("/url", methods=['POST'])

@@ -8,9 +8,11 @@ from sqlalchemy import (
     String,
     Unicode,
     DateTime,
+    Index,
     literal,
 )
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 
@@ -31,13 +33,18 @@ class Brain(Base):
 
 class Node(Base):
     __tablename__ = "node"
+    __table_args__ = (
+        Index("node_name_vidx",
+              func.to_tsvector('simple', 'node.name'),
+              postgresql_using='gin'),
+    )
     id = Column(UUID, primary_key=True)
     brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"))
     data = Column(JSONB)
     tags = Column(ARRAY(Unicode))
     extra_args = {}
     tags = []
-    name = Column(Unicode, nullable=False, index=True)
+    name = Column(Unicode, nullable=False)
     last_read = Column(DateTime)
     last_modified = Column(DateTime)
     read_as_focus = Column(Boolean, default=False)

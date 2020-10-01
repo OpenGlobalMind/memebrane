@@ -1,0 +1,17 @@
+<html>
+  <head>
+    <title>MemeBrane: {{ brain.name }}</title>
+  </head>
+  <body>
+    <div>
+      {% if prev_link %}<a href="{{prev_link}}">&lt;</a>{% endif %}
+      Results for {{query}}:
+      {% if next_link %}<a href="{{next_link}}">&gt;</a>{% endif %}
+      <ol start={{start}}>
+      {% for id, name in nodes %}
+        <li><a href="/brain/{{ brain.slug }}/thought/{{ id }}">{{ name }}</a></li>
+      {% endfor %}
+      </ol>
+    </div>
+  </body>
+</html>
