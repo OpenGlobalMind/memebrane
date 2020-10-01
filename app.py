@@ -1,64 +1,74 @@
-from flask import Flask, redirect, render_template, request
-import requests
 import json
 import re
+from configparser import ConfigParser
+
+from flask import Flask, redirect, render_template, request, Response
+from flask_sqlalchemy import SQLAlchemy
+import requests
+
+from models.utils import get_brain, get_node, add_brain
+
+config = ConfigParser()
+config.read('config.ini')
+mbconfig = config['memebrane']
 
 app = Flask(__name__)
 app.config['FLASK_DEBUG'] = True
 app.config['STATIC_FOLDER'] = '/static'
 app.config['TEMPLATES_FOLDER'] = '/templates'
+app.config['SQLALCHEMY_DATABASE_URI'] = mbconfig['dburl']
+db = SQLAlchemy(app)
 
-# Configure these as appropriate. The default values are for Jerry Michalski's TheBrain.
-home_brain = {
-    'name': "Jerry's Brain",
-    'brain': '3d80058c-14d8-5361-0b61-a061f89baf87',
-    'thought': '32f9fc36-6963-9ee0-9b44-a89112919e29'
-}
-
-def get_thought(brain_id, thought_id):
-    r = requests.get('https://api.thebrain.com/api-v11/brains/' + brain_id + '/thoughts/' + thought_id + '/graph')
-    try:
-        return r.json()
-    except Exception as e:
-        return None
 
 @app.route("/")
 def home():
-    return redirect('/brain/' + home_brain['brain'] + '/thought/' + home_brain['thought'], code=302)
+    brain = get_brain(db.session, mbconfig['default_brain'])
+    if not brain or not brain.base_id:
+        return Response(status=404)
+    return redirect(f'/brain/{brain.slug}/thought/{brain.base_id}', code=302)
+
+
+BRAIN_URL_RE = re.compile(
+    r'https://app.thebrain.com/brains/(?P<brain_id>[^/]+)/thoughts/(?P<thought_id>[^/]+)')
+
 
 @app.route("/url", methods=['POST'])
 def url():
-    u = request.form['url'];
+    url = request.form['url']
+    slug = request.form['slug']
+    name = request.form['name']
+    assert url and slug and name
 
     # TODO: support URLs of the form https://webbrain.com/brainpage/brain/BED8187E-FD1C-CE55-E236-871DD7E1DF32#-6975
 
     # resolve shortened URL
-    if u.startswith('https://bra.in/'):
-        r = requests.get(u)
-        u = r.url
+    if url.startswith('https://bra.in/'):
+        r = requests.get(url)
+        url = r.url
 
     # check for reasonable URL
-    if u.startswith('https://app.thebrain.com/'):
-        pattern = re.compile(r'https://app.thebrain.com/brains/(?P<brain_id>[^/]+)/thoughts/(?P<thought_id>[^/]+)')
-        match = pattern.match(u)
+    if url.startswith('https://app.thebrain.com/'):
+        match = BRAIN_URL_RE.match(url)
         if match is not None:
-            return redirect('/brain/' + match.group('brain_id') + '/thought/' + match.group('thought_id'), code=302)
+            brain_id, thought_id = match.group('brain_id'), match.group('thought_id')
+            add_brain(db.session, slug, brain_id, name, thought_id)
+            return redirect(f'/brain/{brain_id}/thought/{thought_id}', code=302)
 
     # no joy
     return render_template(
         'url-error.html',
-        bad_url = u
+        bad_url=url
     )
 
-@app.route("/brain/<brain_id>/thought/<thought_id>")
-def get_thought_route(brain_id=None, thought_id=None):
-    t = get_thought(brain_id, thought_id)
-    if t is None:
-      return render_template(
-          'get-thought-error.html',
-          brain_id = brain_id,
-          thought_id = thought_id
-      )
+
+@app.route("/brain/<brain_slug>/thought/<thought_id>")
+def get_thought_route(brain_slug, thought_id):
+    brain = get_brain(db.session, brain_slug)
+    if not brain:
+        return Response("No such brain", status=404)
+    node, data = get_node(db.session, brain, thought_id)
+    if not node:
+        return Response("No such thought", status=404)
 
     # get show args
     show = request.args.get('show')
@@ -68,27 +78,54 @@ def get_thought_route(brain_id=None, thought_id=None):
         show = ''
         show_query_string = ''
 
+    linkst = dict(parent={}, child={}, sibling={}, jump={})
+    if 'json' in show and not data:
+        thoughts = [node.data]
+        links = []
+        for ltype, node, link in node.get_neighbour_data(
+                db.session, full=True, with_links=True):
+            linkst[ltype][node.id] = node.name
+            thoughts.append(node.data)
+            links.append(link.data)
+        root = dict(
+            id=node.id,
+            attachments=[],  # TODO
+            jumps=list(linkst['jump'].keys()),
+            parents=list(linkst['parent'].keys()),
+            siblings=list(linkst['sibling'].keys()),
+            children=list(linkst['child'].keys()))
+        data = dict(
+            root=root, thoughts=thoughts, links=links,
+            brainId=brain.id, isUserAuthenticated=False, errors=[], stamp=0,
+            status=1, tags=node.tags, notesHtml="", notesMarkdown="")
+    else:
+        if not data:
+            # TODO: Store in node
+            root = dict(attachments=[])
+            data = dict(root=root, notesHtml="", notesMarkdown="", tags=[])
+        for (ltype, id, name) in node.get_neighbour_data(db.session):
+            linkst[ltype][id] = name
+
     # create a lookup table of names by thought_id
-    thoughts = t['thoughts']
-    names = {}
-    for thought in thoughts:
-        names[thought['id']] = thought['name']
+    names = {node.id: node.name}
+    for d in linkst.values():
+        names.update(d)
 
     # render page
-    root = t['root']
     return render_template(
         'index.html',
-        json = json.dumps(t, indent=2),
-        show = show,
-        show_query_string = show_query_string,
-        home_brain = home_brain,
-        brain_id = brain_id,
-        this_id = thought_id,
-        names = names,
-        parents = root['parents'],
-        siblings = root['siblings'],
-        jumps = root['jumps'],
-        children = root['children'],
-        attachments = t['attachments'],
-        notes_html = t['notesHtml'],
+        json=json.dumps(data, indent=2),
+        show=show,
+        show_query_string=show_query_string,
+        brain=brain,
+        node=node.data,
+        tags=node.tags,
+        parents=linkst['parent'],
+        siblings=linkst['sibling'],
+        children=linkst['child'],
+        jumps=linkst['jump'],
+        names=names,
+        attachments=node.data.get('attachments', []),
+        notes_html=node.data.get('notesHtml', ""),
+        notes_markdown=node.data.get('notesMarkdown', ""),
     )
