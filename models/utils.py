@@ -75,13 +75,17 @@ def add_to_cache(session, data, force=False):
         node_data = nodes.pop(node.id)
         focus = node.id == root_id
         if focus:
-            node_data['attachments'] = data['root']['attachments']
             for t in ['tags', 'notesHtml', 'notesMarkdown']:
                 if t in data:
                     node_data[t] = data[t]
         node.update_from_json(node_data, focus, force)
-    for ndata in nodes.values():
-        session.add(Node.create_from_json(ndata, ndata['id'] == root_id))
+    for node_data in nodes.values():
+        focus = node_data['id'] == root_id
+        if focus:
+            for t in ['tags', 'notesHtml', 'notesMarkdown']:
+                if t in data:
+                    node_data[t] = data[t]
+        session.add(Node.create_from_json(node_data, node_data['id'] == root_id))
     session.flush()
     links = {l['id']: l for l in data.get("links", ())}
     links_in_cache = session.query(Link).filter(Link.id.in_(links.keys()))
