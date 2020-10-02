@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import requests
 
-from .models import Node, Brain, Link
+from .models import Node, Brain, Link, Attachment
 
 CONFIG_BRAINS = None
 BRAINS = {}
@@ -70,25 +70,32 @@ def populate_brains(session, brains):
 def add_to_cache(session, data, force=False):
     root_id = data['root']['id']
     nodes = {t['id']: t for t in data["thoughts"]}
-    links = {l['id']: l for l in data["links"]}
     nodes_in_cache = session.query(Node).filter(Node.id.in_(nodes.keys()))
     for node in nodes_in_cache:
+        node_data = nodes.pop(node.id)
         focus = node.id == root_id
-        extras = {}
         if focus:
-            extras['attachments'] = data['root']['attachments']
+            node_data['attachments'] = data['root']['attachments']
             for t in ['tags', 'notesHtml', 'notesMarkdown']:
                 if t in data:
-                    extras[t] = data[t]
-        node.update_from_json(nodes.pop(node.id), focus, force, **extras)
-    for data in nodes.values():
-        session.add(Node.create_from_json(data, data['id'] == root_id))
+                    node_data[t] = data[t]
+        node.update_from_json(node_data, focus, force)
+    for ndata in nodes.values():
+        session.add(Node.create_from_json(ndata, ndata['id'] == root_id))
     session.flush()
+    links = {l['id']: l for l in data.get("links", ())}
     links_in_cache = session.query(Link).filter(Link.id.in_(links.keys()))
     for link in links_in_cache:
         link.update_from_json(links.pop(link.id), force)
-    for data in links.values():
-        session.add(Link.create_from_json(data))
+    for ldata in links.values():
+        session.add(Link.create_from_json(ldata))
+    attachments = {l['id']: l for l in data.get("attachments", ())}
+    attachments_in_cache = session.query(Attachment).filter(
+        Attachment.id.in_(attachments.keys()))
+    for attachment in attachments_in_cache:
+        attachment.update_from_json(attachments.pop(attachment.id), force)
+    for adata in attachments.values():
+        session.add(Attachment.create_from_json(adata))
     session.commit()
 
 

@@ -52,9 +52,9 @@
 	Attachments:
 	{% for attachment in attachments %}
 	<div style="margin: 1em 0 1em 2.5em">
-	  <div><span style="font-weight: bold">{{ attachment['name'] }}</span>
-	    {% if attachment['type'] == 3 %}(link){% else %}(type {{ attachment['type'] }}){% endif %}</div>
-	  <div><a target="_blank" rel="noopener" href="{{ attachment['location'] }}">{{ attachment['location'] }}</a></div>
+	  <div><span style="font-weight: bold">{{ attachment.name }}</span>
+	    {% if attachment.data['type'] == 3 %}(link){% else %}(type {{ attachment.data['type'] }}){% endif %}</div>
+	  <div><a target="_blank" rel="noopener" href="{{ attachment.location }}">{{ attachment.location }}</a></div>
 	</div>
 	{% endfor %}
       </p>

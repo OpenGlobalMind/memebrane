@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 class BaseOps(object):
     pass
 
+
 Base = declarative_base(cls=BaseOps)
 
 
@@ -39,7 +40,7 @@ class Node(Base):
               postgresql_using='gin'),
     )
     id = Column(UUID, primary_key=True)
-    brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"))
+    brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"), nullable=False)
     data = Column(JSONB)
     tags = Column(ARRAY(Unicode))
     extra_args = {}
@@ -94,9 +95,10 @@ class Node(Base):
         return query.all()
 
     @classmethod
-    def create_from_json(cls, data, focus=False, **extra):
+    def create_from_json(cls, data, focus=False):
         data_time = parse_datetime(max(filter(None, [
             data['modificationDateTime'], data['linksModificationDateTime']])))
+        tags = data.pop('tags', None)
         return cls(
             id=data['id'],
             brain_id=data['brainId'],
@@ -105,10 +107,10 @@ class Node(Base):
             last_read=datetime.now(),
             last_modified=data_time,
             read_as_focus=focus,
-            **extra
+            tags=tags
         )
 
-    def update_from_json(self, data, focus=False, force=False, **extra):
+    def update_from_json(self, data, focus=False, force=False):
         assert data['id'] == self.id
         data_time = parse_datetime(max(filter(None, [
             data['modificationDateTime'], data['linksModificationDateTime']])))
@@ -119,23 +121,23 @@ class Node(Base):
         if data_time <= self.last_modified and not force:
             return
         self.brain_id = data['brainId']
+        tags = data.pop('tags', None)
+        if tags is not None:
+            self.tags = tags
         self.data.update(data)
         self.name = data['name']
         self.last_modified = data_time
-        if 'tags' in extra:
-            self.tags = extra.pop('tags')
-        self.data.update(extra)
 
 
 class Link(Base):
     __tablename__ = "link"
     id = Column(UUID, primary_key=True)
-    brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"))
+    brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"), nullable=False)
     data = Column(JSONB)
     last_modified = Column(DateTime)
     is_jump = Column(Boolean, default=False)
-    parent_id = Column(UUID, ForeignKey(Node.id, ondelete="CASCADE"), index=True)
-    child_id = Column(UUID, ForeignKey(Node.id, ondelete="CASCADE"), index=True)
+    parent_id = Column(UUID, ForeignKey(Node.id, ondelete="CASCADE"), nullable=False, index=True)
+    child_id = Column(UUID, ForeignKey(Node.id, ondelete="CASCADE"), nullable=False, index=True)
     parent = relationship(Node, foreign_keys=[parent_id], backref="child_links")
     child = relationship(Node, foreign_keys=[child_id], backref="parent_links")
 
@@ -172,3 +174,40 @@ Node.parents = relationship(
     Node, secondary=Link.__table__,
     primaryjoin=Node.id == Link.child_id,
     secondaryjoin=Node.id == Link.parent_id)
+
+
+class Attachment(Base):
+    __tablename__ = "attachment"
+    id = Column(UUID, primary_key=True)
+    brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"), nullable=False)
+    data = Column(JSONB)
+    last_modified = Column(DateTime)
+    location = Column(Unicode, nullable=False)
+    node_id = Column(UUID, ForeignKey(Node.id, ondelete="CASCADE"), nullable=False)
+    node = relationship(Node, backref="attachments")
+
+    @classmethod
+    def create_from_json(cls, data):
+        return cls(
+            id=data['id'],
+            brain_id=data['brainId'],
+            data=data,
+            last_modified=parse_datetime(data['modificationDateTime']),
+            location=data['location'],
+            node_id=data['sourceId']
+        )
+
+    def update_from_json(self, data, force=False):
+        assert data['id'] == self.id
+        data_time = parse_datetime(data['modificationDateTime'])
+        if data_time <= self.last_modified and not force:
+            return
+        self.brain_id = data['brainId']
+        self.data = data
+        self.last_modified = data_time
+        self.location = data['location']
+        self.node_id = data['sourceId']
+
+    @property
+    def name(self):
+        return self.data['name']
