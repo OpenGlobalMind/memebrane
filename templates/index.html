@@ -1,6 +1,6 @@
 <html>
   <head>
-    <title>MemeBrane: {{ names[this_id] }}</title>
+    <title>MemeBrane: {{ node.name }}</title>
   </head>
   <body>
     <div>
@@ -18,7 +18,7 @@
 	<a href="/brain/{{ brain.slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
 	{% endfor %}
       </p>
-      <h1>{{ names[this_id] }}</h1>
+      <h1>{{ node.name }}</h1>
       {% if 'siblings' in show %}
 	<p>
 	  Siblings:
@@ -37,9 +37,9 @@
       </p>
       <p>
 	Jumps:
-	{% for jump in jumps %}
+	{% for id, name in jumps.items() %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/brain/{{ brain.slug }}/thought/{{ jump }}{{ show_query_string }}">{{ names[jump] }}</a>
+	<a href="/brain/{{ brain.slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
 	{% endfor %}
       </p>
       <p>
