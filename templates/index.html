@@ -1,11 +1,11 @@
 <html>
   <head>
-    <title>MemeBrane: {{ names[this_id] }}</title>
+    <title>MemeBrane: {{ node.name }}</title>
   </head>
   <body>
     <div>
       <form method="post" action="/url">
-	Start with <a href="/brain/{{ home_brain['brain'] }}/thought/{{ home_brain['thought'] }}{{ show_query_string }}">[{{ home_brain['name'] }}]</a>
+	Start with <a href="/brain/{{ brain.slug }}/thought/{{ brain.base_id }}{{ show_query_string }}">[{{ brain.name }}]</a>
 	or a web brain URL: <input type="text" name="url" size="40"> <input type="submit" value="Go">
       </form>
     </div>
@@ -13,33 +13,33 @@
     <div>
       <p>
 	Parents:
-	{% for parent in parents %}
+	{% for id, name in parents.items() %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/brain/{{ brain_id }}/thought/{{ parent }}{{ show_query_string }}">{{ names[parent] }}</a>
+	<a href="/brain/{{ brain.slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
 	{% endfor %}
       </p>
-      <h1>{{ names[this_id] }}</h1>
+      <h1>{{ node.name }}</h1>
       {% if 'siblings' in show %}
 	<p>
 	  Siblings:
-	  {% for sibling in siblings %}
+	  {% for id, name in siblings.items() %}
 	  {% if loop.index > 1 %} - {% endif %}
-	  <a href="/brain/{{ brain_id }}/thought/{{ sibling }}{{ show_query_string }}">{{ names[sibling] }}</a>
+	  <a href="/brain/{{ brain.slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
 	  {% endfor %}
 	</p>
       {% endif %}
       <p>
 	Children:
-	{% for child in children %}
+	{% for id, name in children.items() %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/brain/{{ brain_id }}/thought/{{ child }}{{ show_query_string }}">{{ names[child] }}</a>
+	<a href="/brain/{{ brain.slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
 	{% endfor %}
       </p>
       <p>
 	Jumps:
-	{% for jump in jumps %}
+	{% for id, name in jumps.items() %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/brain/{{ brain_id }}/thought/{{ jump }}{{ show_query_string }}">{{ names[jump] }}</a>
+	<a href="/brain/{{ brain.slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
 	{% endfor %}
       </p>
       <p>
@@ -52,9 +52,9 @@
 	Attachments:
 	{% for attachment in attachments %}
 	<div style="margin: 1em 0 1em 2.5em">
-	  <div><span style="font-weight: bold">{{ attachment['name'] }}</span>
-	    {% if attachment['type'] == 3 %}(link){% else %}(type {{ attachment['type'] }}){% endif %}</div>
-	  <div><a target="_blank" rel="noopener" href="{{ attachment['location'] }}">{{ attachment['location'] }}</a></div>
+	  <div><span style="font-weight: bold">{{ attachment.name }}</span>
+	    {% if attachment.data['type'] == 3 %}(link){% else %}(type {{ attachment.data['type'] }}){% endif %}</div>
+	  <div><a target="_blank" rel="noopener" href="{{ attachment.location }}">{{ attachment.location }}</a></div>
 	</div>
 	{% endfor %}
       </p>
