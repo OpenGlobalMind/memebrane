@@ -116,7 +116,8 @@ def populate_brains(session, brains):
 def add_to_cache(session, data, force=False):
     root_id = data['root']['id']
     nodes = {t['id']: t for t in data["thoughts"]}
-    nodes.update({t[id]: t for t in data["tags"]})
+    nodes.update({t['id']: t for t in data["tags"]})
+    node_ids = set(nodes.keys())
     nodes_in_cache = session.query(Node).filter(Node.id.in_(nodes.keys()))
     for node in nodes_in_cache:
         node_data = nodes.pop(node.id)
@@ -139,7 +140,10 @@ def add_to_cache(session, data, force=False):
     for link in links_in_cache:
         link.update_from_json(links.pop(link.id), force)
     for ldata in links.values():
-        session.add(Link.create_from_json(ldata))
+        if ldata['thoughtIdA'] in node_ids and ldata['thoughtIdB'] in node_ids:
+            session.add(Link.create_from_json(ldata))
+        else:
+            print(f"Missing node for this link:{ldata}")
     attachments = {l['id']: l for l in data.get("attachments", ())}
     attachments_in_cache = session.query(Attachment).filter(
         Attachment.id.in_(attachments.keys()))
