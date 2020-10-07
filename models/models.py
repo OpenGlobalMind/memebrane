@@ -15,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm.attributes import flag_modified
 
 
 if True:
@@ -54,8 +55,6 @@ class Node(Base):
     brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"), nullable=False)
     data = Column(JSONB)
     tags = Column(ARRAY(UUID))
-    extra_args = {}
-    tags = []
     name = Column(Unicode, nullable=False)
     last_read = Column(DateTime)
     last_modified = Column(DateTime)
@@ -66,7 +65,7 @@ class Node(Base):
 
     def get_neighbour_data(
             self, session, parents=True, children=True, siblings=True,
-            jumps=True, full=False, with_links=False):
+            jumps=True, tags=True, of_tags=True, full=False, with_links=False):
         queries = []
         entities = [Node] if full else [Node.id, Node.name]
         if with_links:
@@ -99,6 +98,18 @@ class Node(Base):
                 literal('jump'), *entities).join(
                 Link, Node.child_links).filter(
                 (Link.child_id == self.id) & Link.is_jump))
+        if tags and self.tags:
+            query = session.query(
+                literal('tag'), *entities).filter(Node.id.in_(self.tags))
+            if with_links:
+                query = query.outerjoin(Link, Link.id == None)
+            queries.append(query)
+        if of_tags:
+            query = session.query(
+                literal('of_tag'), *entities).filter(Node.tags.contains([self.id]))
+            if with_links:
+                query = query.outerjoin(Link, Link.id == None)
+            queries.append(query)
         if not queries:
             return []
         query = queries.pop()
@@ -111,6 +122,8 @@ class Node(Base):
         data_time = parse_datetime(max(filter(None, [
             data['modificationDateTime'], data['linksModificationDateTime']])))
         tags = data.pop('tags', None)
+        if tags:
+            tags = [t['id'] for t in tags]
         return cls(
             id=data['id'],
             brain_id=data['brainId'],
@@ -119,6 +132,7 @@ class Node(Base):
             last_read=datetime.now(),
             last_modified=data_time,
             read_as_focus=focus,
+            is_tag=data.get('kind', 1) == 4,
             tags=tags
         )
 
@@ -134,11 +148,14 @@ class Node(Base):
             return
         self.brain_id = data['brainId']
         tags = data.pop('tags', None)
-        if tags is not None:
+        if tags:
+            tags = [t['id'] for t in tags]
             self.tags = tags
         self.data.update(data)
+        flag_modified(self, 'data')
         self.name = data['name']
         self.last_modified = data_time
+        self.is_tag = data.get('kind', 1) == 4
 
 
 class Link(Base):

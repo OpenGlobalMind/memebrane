@@ -119,15 +119,19 @@ def get_thought_route(brain_slug, thought_id):
     show = request.args.get('show', '')
     show_query_string = f"?show={show}" if show else ''
 
-    linkst = dict(parent={}, child={}, sibling={}, jump={})
+    linkst = dict(parent={}, child={}, sibling={}, jump={}, tag={}, of_tag={})
+    tags = []
     if 'json' in show and not data:
         thoughts = [node.data]
         links = []
         for ltype, node_, link in node.get_neighbour_data(
                 db.session, full=True, with_links=True):
             linkst[ltype][node_.id] = node_.name
-            thoughts.append(node_.data)
-            links.append(link.data)
+            if ltype == 'tag':
+                tags.append(node_)
+            elif ltype != 'of_tag':
+                thoughts.append(node_.data)
+                links.append(link.data)
         root = dict(
             id=node.id,
             attachments=[att.id for att in node.attachments],  # TODO
@@ -138,7 +142,7 @@ def get_thought_route(brain_slug, thought_id):
         data = dict(
             root=root, thoughts=thoughts, links=links,
             brainId=brain.id, isUserAuthenticated=False, errors=[], stamp=0,
-            status=1, tags=node.tags, notesHtml="", notesMarkdown="")
+            status=1, tags=tags, notesHtml="", notesMarkdown="")
     else:
         if not data:
             # TODO: Store in node
@@ -162,11 +166,12 @@ def get_thought_route(brain_slug, thought_id):
         show_query_string=show_query_string,
         brain=brain,
         node=node.data,
-        tags=node.tags,
+        tags=linkst['tag'],
         parents=linkst['parent'],
         siblings=linkst['sibling'],
         children=linkst['child'],
         jumps=linkst['jump'],
+        of_tag=linkst['of_tag'],
         names=names,
         attachments=node.attachments,
         notes_html=notes_html,

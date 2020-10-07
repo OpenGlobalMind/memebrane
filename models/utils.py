@@ -116,6 +116,7 @@ def populate_brains(session, brains):
 def add_to_cache(session, data, force=False):
     root_id = data['root']['id']
     nodes = {t['id']: t for t in data["thoughts"]}
+    nodes.update({t[id]: t for t in data["tags"]})
     nodes_in_cache = session.query(Node).filter(Node.id.in_(nodes.keys()))
     for node in nodes_in_cache:
         node_data = nodes.pop(node.id)

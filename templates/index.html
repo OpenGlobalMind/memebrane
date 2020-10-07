@@ -43,6 +43,24 @@
 	{% endfor %}
       </p>
       <p>
+  {% if tags %}
+  Tags:
+  {% for id, name in tags.items() %}
+  {% if loop.index > 1 %} - {% endif %}
+  <a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
+  {% endfor %}
+      </p>
+  {% endif %}
+  {% if node.is_tag %}
+      <p>
+        With tag:
+      {% for id, name in of_tag.items() %}
+      {% if loop.index > 1 %} - {% endif %}
+      <a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
+      {% endfor %}
+      </p>
+  {% endif %}
+      <p>
 	Notes:
 	<div style="margin: 1em 0 1em 2.5em">
 	  {{ notes_html|safe }}
