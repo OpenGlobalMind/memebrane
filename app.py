@@ -142,7 +142,7 @@ def get_thought_route(brain_slug, thought_id):
         data = dict(
             root=root, thoughts=thoughts, links=links,
             brainId=brain.id, isUserAuthenticated=False, errors=[], stamp=0,
-            status=1, tags=tags, notesHtml="", notesMarkdown="")
+            status=1, tags=[tag.data for tag in tags], notesHtml="", notesMarkdown="")
     else:
         if not data:
             # TODO: Store in node
@@ -166,6 +166,7 @@ def get_thought_route(brain_slug, thought_id):
         show_query_string=show_query_string,
         brain=brain,
         node=node.data,
+        is_tag=node.is_tag,
         tags=linkst['tag'],
         parents=linkst['parent'],
         siblings=linkst['sibling'],
