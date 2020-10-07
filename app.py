@@ -7,7 +7,8 @@ from flask_sqlalchemy import SQLAlchemy
 import requests
 
 from models.models import Node
-from models.utils import get_brain, get_node, add_brain
+from models.utils import get_brain, get_node, add_brain, convert_link, LINK_RE
+
 
 config = ConfigParser()
 config.read('config.ini')
@@ -18,6 +19,7 @@ app.config['FLASK_DEBUG'] = True
 app.config['STATIC_FOLDER'] = '/static'
 app.config['TEMPLATES_FOLDER'] = '/templates'
 app.config['SQLALCHEMY_DATABASE_URI'] = mbconfig['dburl']
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 
@@ -26,11 +28,22 @@ def home():
     brain = get_brain(db.session, mbconfig['default_brain'])
     if not brain or not brain.base_id:
         return Response(status=404)
-    return redirect(f'/brain/{brain.slug}/thought/{brain.base_id}', code=302)
+    return redirect(f'/brain/{brain.safe_slug}/thought/{brain.base_id}', code=302)
 
 
 BRAIN_URL_RE = re.compile(
     r'https://app.thebrain.com/brains/(?P<brain_id>[^/]+)/thoughts/(?P<thought_id>[^/]+)')
+
+
+@app.route("/brain/<brain_slug>")
+def base_brain(brain_slug):
+    brain = get_brain(db.session, brain_slug)
+    if not brain:
+        return Response("No such brain", status=404)
+    # TODO: check if the brain really exists. Record failure in DB otherwise
+    if not brain.base_id:
+        return Response("No base_id", status=404)
+    return redirect(f'/brain/{brain.safe_slug}/thought/{brain.base_id}', code=302)
 
 
 @app.route("/brain/<brain_slug>/search")
@@ -61,9 +74,8 @@ def search(brain_slug):
 @app.route("/url", methods=['POST'])
 def url():
     url = request.form['url']
-    slug = request.form['slug']
-    name = request.form['name']
-    assert url and slug and name
+    slug = request.form.get('slug', None)
+    name = request.form.get('name', None)
 
     # TODO: support URLs of the form https://webbrain.com/brainpage/brain/BED8187E-FD1C-CE55-E236-871DD7E1DF32#-6975
 
@@ -77,7 +89,7 @@ def url():
         match = BRAIN_URL_RE.match(url)
         if match is not None:
             brain_id, thought_id = match.group('brain_id'), match.group('thought_id')
-            add_brain(db.session, slug, brain_id, name, thought_id)
+            add_brain(db.session, brain_id, slug, name, thought_id)
             return redirect(f'/brain/{brain_id}/thought/{thought_id}', code=302)
 
     # no joy
@@ -92,17 +104,20 @@ def get_thought_route(brain_slug, thought_id):
     brain = get_brain(db.session, brain_slug)
     if not brain:
         return Response("No such brain", status=404)
-    node, data = get_node(db.session, brain, thought_id)
+
+    if brain.slug and brain_slug == brain.id:
+        # prefer the short form
+        query_string = ('?' + request.query_string) if request.query_string else ''
+        return redirect(f'/brain/{brain.slug}/thought/{thought_id}{query_string}', code=302)
+
+    force = request.args.get('reload', False)
+    node, data = get_node(db.session, brain, thought_id, force=force)
     if not node:
         return Response("No such thought", status=404)
 
     # get show args
-    show = request.args.get('show')
-    if show:
-        show_query_string = '?show={}'.format(show)
-    else:
-        show = ''
-        show_query_string = ''
+    show = request.args.get('show', '')
+    show_query_string = f"?show={show}" if show else ''
 
     linkst = dict(parent={}, child={}, sibling={}, jump={})
     if 'json' in show and not data:
@@ -136,6 +151,9 @@ def get_thought_route(brain_slug, thought_id):
     names = {node.id: node.name}
     for d in linkst.values():
         names.update(d)
+
+    notes_html = node.data.get('notesHtml', "")
+    notes_html = re.sub(LINK_RE, lambda match: convert_link(match, brain, show_query_string), notes_html)
     # render page
     return render_template(
         'index.html',
@@ -151,6 +169,6 @@ def get_thought_route(brain_slug, thought_id):
         jumps=linkst['jump'],
         names=names,
         attachments=node.attachments,
-        notes_html=node.data.get('notesHtml', ""),
+        notes_html=notes_html,
         notes_markdown=node.data.get('notesMarkdown', ""),
     )

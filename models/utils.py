@@ -1,6 +1,9 @@
 from os.path import join, dirname
 import json
 from datetime import timedelta, datetime
+import re
+import base64
+import uuid
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -27,21 +30,64 @@ def get_config_brains():
         with open(join(dirname(dirname(__file__)), 'brains.json')) as f:
             CONFIG_BRAINS = json.load(f)
 
+
+LINK_RE = re.compile(r'\bbrain://(?:api\.thebrain\.com/(?P<brain>[-_A-Za-z0-9]{22})/)?(?P<node>[-_A-Za-z0-9]{22})/(?P<suffix>\w+)\b')
+UUID_RE = re.compile(r'^[0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12}$', re.I)
+
+
+def _b642uuid(b):
+    b = base64.urlsafe_b64decode(b+'==')
+    return uuid.UUID(bytes_le=b)
+
+
+def extract_link(link_match):
+    re_g = link_match.groupdict()
+    brain_s = re_g['brain']
+    return (_b642uuid(re_g['node']), _b642uuid(brain_s) if brain_s else None)
+
+
+def convert_link(link_match, brain, query_string=''):
+    node_id, brain_id = extract_link(link_match)
+    if brain_id:
+        return f"/brain/{brain_id}/thought/{node_id}{query_string}"
+    else:
+        return f"/brain/{brain.safe_slug}/thought/{node_id}{query_string}"
+
+
 def get_brain(session, slug):
     global CONFIG_BRAINS, BRAINS
-    config_brains = get_config_brains()
-    brain_data = CONFIG_BRAINS.get(slug, None)
-    brain = BRAINS.get(slug, None)
-    if not brain:
-        brain = session.query(Brain).filter_by(slug=slug).first()
-        if brain_data and not brain:
-            brain = add_brain(session, slug, brain_data['brain'],
-                              brain_data['name'], brain_data.get('thought', None))
-        BRAINS[slug] = brain  # may be None, cache that
+    get_config_brains()
+    if UUID_RE.match(slug):
+        brains = [b for b in BRAINS.values() if b.id == slug]
+        if brains:
+            brain = brains[0]
+            session.merge(brain)
+        else:
+            brain_data = [b for b in CONFIG_BRAINS.values() if b['brain'] == slug]
+            brain = session.query(Brain).filter_by(id=slug).first()
+            if not brain:
+                if brain_data:
+                    brain_data = brain_data[0]
+                    brain = add_brain(session, brain_data['brain'], slug,
+                                      brain_data['name'], brain_data.get('thought', None))
+                else:
+                    brain = add_brain(session, slug)
+            BRAINS[slug] = brain  # may be None, cache that
+    else:
+        brain = BRAINS.get(slug, None)
+        if brain:
+            session.merge(brain)
+        else:
+            brain = session.query(Brain).filter_by(slug=slug).first()
+            brain_data = CONFIG_BRAINS.get(slug, None)
+            if brain_data and not brain:
+                brain = add_brain(session, brain_data['brain'], slug,
+                                  brain_data['name'], brain_data.get('thought', None))
+            BRAINS[slug] = brain  # may be None, cache that
     return brain
 
 
-def add_brain(session, slug, id, name, base_id=None):
+def add_brain(session, id, slug=None, name=None, base_id=None):
     global BRAINS
     brain = Brain(id=id, name=name, base_id=base_id, slug=slug)
     session.add(brain)
@@ -106,7 +152,7 @@ def add_to_cache(session, data, force=False):
 def get_node(session, brain, id, cache_staleness=timedelta(days=1), force=False):
     node = session.query(Node).filter_by(id=id, brain_id=brain.id).first()
     data = None
-    if not node or cache_staleness is None or not node.read_as_focus or datetime.now() - node.last_read > cache_staleness:
+    if force or not node or cache_staleness is None or not node.read_as_focus or datetime.now() - node.last_read > cache_staleness:
         data = get_thought_data(brain.id, id)
         if data:
             add_to_cache(session, data, force)

@@ -9,12 +9,19 @@ from sqlalchemy import (
     Unicode,
     DateTime,
     Index,
+    Text,
     literal,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
+
+
+if True:
+    from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
+else:
+    UUID = String
+    JSONB = Text
 
 
 class BaseOps(object):
@@ -31,6 +38,10 @@ class Brain(Base):
     slug = Column(String, unique=True)
     base_id = Column(UUID, nullable=True)
 
+    @property
+    def safe_slug(self):
+        return self.slug or self.id
+
 
 class Node(Base):
     __tablename__ = "node"
@@ -42,13 +53,14 @@ class Node(Base):
     id = Column(UUID, primary_key=True)
     brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"), nullable=False)
     data = Column(JSONB)
-    tags = Column(ARRAY(Unicode))
+    tags = Column(ARRAY(UUID))
     extra_args = {}
     tags = []
     name = Column(Unicode, nullable=False)
     last_read = Column(DateTime)
     last_modified = Column(DateTime)
     read_as_focus = Column(Boolean, default=False)
+    is_tag = Column(Boolean, default=False)
     brain = relationship(Brain, foreign_keys=[brain_id])
     # siblings = relationship("Node", secondary="Link")
 
