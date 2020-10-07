@@ -107,7 +107,7 @@ def get_thought_route(brain_slug, thought_id):
 
     if brain.slug and brain_slug == brain.id:
         # prefer the short form
-        query_string = ('?' + request.query_string) if request.query_string else ''
+        query_string = ('?' + request.query_string.decode('ascii')) if request.query_string else ''
         return redirect(f'/brain/{brain.slug}/thought/{thought_id}{query_string}', code=302)
 
     force = request.args.get('reload', False)
