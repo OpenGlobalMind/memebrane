@@ -50,6 +50,7 @@ class Node(Base):
         Index("node_name_vidx",
               func.to_tsvector('simple', 'node.name'),
               postgresql_using='gin'),
+        Index("node_tags_idx", 'tags', postgresql_using='gin'),
     )
     id = Column(UUID, primary_key=True)
     brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"), nullable=False)

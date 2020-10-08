@@ -148,7 +148,8 @@ def get_thought_route(brain_slug, thought_id):
             # TODO: Store in node
             root = dict(attachments=[att.id for att in node.attachments])
             data = dict(root=root, notesHtml="", notesMarkdown="", tags=[])
-        for (ltype, id, name) in node.get_neighbour_data(db.session):
+        for (ltype, id, name) in node.get_neighbour_data(
+                db.session, siblings='siblings' in show):
             linkst[ltype][id] = name
 
     # create a lookup table of names by thought_id
