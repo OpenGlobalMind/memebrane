@@ -6,7 +6,7 @@ from flask import Flask, redirect, render_template, request, Response
 from flask_sqlalchemy import SQLAlchemy
 import requests
 
-from models.models import Node
+from models.models import Node, Brain, Link, Attachment
 from models.utils import get_brain, get_node, add_brain, convert_link, LINK_RE
 
 
@@ -41,9 +41,14 @@ def base_brain(brain_slug):
     if not brain:
         return Response("No such brain", status=404)
     # TODO: check if the brain really exists. Record failure in DB otherwise
-    if not brain.base_id:
-        return Response("No base_id", status=404)
-    return redirect(f'/brain/{brain.safe_slug}/thought/{brain.base_id}', code=302)
+    if request.accept_mimetypes.best != 'application/json':
+        if not brain.base_id:
+            return Response("No base_id", status=404)
+        return redirect(f'/brain/{brain.safe_slug}/thought/{brain.base_id}', code=302)
+    nodes = db.session.query(Node.data).filter_by(brain_id=brain.id).all()
+    links = db.session.query(Link.data).filter_by(brain_id=brain.id).all()
+    attachments = db.session.query(Attachment.data).filter_by(brain_id=brain.id).all()
+    return dict(nodes=nodes, links=links, attachments=attachments)
 
 
 @app.route("/brain/<brain_slug>/search")
@@ -99,18 +104,50 @@ def url():
     )
 
 
+def recompose_data(node):
+    linkst = dict(parent={}, child={}, sibling={}, jump={}, tag={}, of_tag={})
+    thoughts = [node.data]
+    links = []
+    tags = []
+    for ltype, node_, link in node.get_neighbour_data(
+            db.session, full=True, with_links=True):
+        linkst[ltype][node_.id] = node_.name
+        if ltype == 'tag':
+            tags.append(node_)
+        elif ltype != 'of_tag':
+            thoughts.append(node_.data)
+            links.append(link.data)
+    root = dict(
+        id=node.id,
+        attachments=[att.id for att in node.attachments],  # TODO
+        jumps=list(linkst['jump'].keys()),
+        parents=list(linkst['parent'].keys()),
+        siblings=list(linkst['sibling'].keys()),
+        children=list(linkst['child'].keys()))
+    return linkst, dict(
+        root=root, thoughts=thoughts, links=links,
+        brainId=node.brain.id, isUserAuthenticated=False, errors=[], stamp=0,
+        status=1, tags=[tag.data for tag in tags], notesHtml="", notesMarkdown="")
+
+
 @app.route("/brain/<brain_slug>/thought/<thought_id>")
 def get_thought_route(brain_slug, thought_id):
     brain = get_brain(db.session, brain_slug)
     if not brain:
         return Response("No such brain", status=404)
 
+    force = request.args.get('reload', False)
+    if request.accept_mimetypes.best == 'application/json':
+        node, data = get_node(db.session, brain, thought_id, force=force)
+        if data:
+            return data
+        return recompose_data(node)[1]
+
     if brain.slug and brain_slug == brain.id:
         # prefer the short form
         query_string = ('?' + request.query_string.decode('ascii')) if request.query_string else ''
         return redirect(f'/brain/{brain.slug}/thought/{thought_id}{query_string}', code=302)
 
-    force = request.args.get('reload', False)
     node, data = get_node(db.session, brain, thought_id, force=force)
     if not node:
         return Response("No such thought", status=404)
@@ -119,35 +156,14 @@ def get_thought_route(brain_slug, thought_id):
     show = request.args.get('show', '')
     show_query_string = f"?show={show}" if show else ''
 
-    linkst = dict(parent={}, child={}, sibling={}, jump={}, tag={}, of_tag={})
-    tags = []
     if 'json' in show and not data:
-        thoughts = [node.data]
-        links = []
-        for ltype, node_, link in node.get_neighbour_data(
-                db.session, full=True, with_links=True):
-            linkst[ltype][node_.id] = node_.name
-            if ltype == 'tag':
-                tags.append(node_)
-            elif ltype != 'of_tag':
-                thoughts.append(node_.data)
-                links.append(link.data)
-        root = dict(
-            id=node.id,
-            attachments=[att.id for att in node.attachments],  # TODO
-            jumps=list(linkst['jump'].keys()),
-            parents=list(linkst['parent'].keys()),
-            siblings=list(linkst['sibling'].keys()),
-            children=list(linkst['child'].keys()))
-        data = dict(
-            root=root, thoughts=thoughts, links=links,
-            brainId=brain.id, isUserAuthenticated=False, errors=[], stamp=0,
-            status=1, tags=[tag.data for tag in tags], notesHtml="", notesMarkdown="")
+        linkst, data = recompose_data(node)
     else:
         if not data:
             # TODO: Store in node
             root = dict(attachments=[att.id for att in node.attachments])
             data = dict(root=root, notesHtml="", notesMarkdown="", tags=[])
+        linkst = dict(parent={}, child={}, sibling={}, jump={}, tag={}, of_tag={})
         for (ltype, id, name) in node.get_neighbour_data(
                 db.session, siblings='siblings' in show):
             linkst[ltype][id] = name
@@ -158,7 +174,10 @@ def get_thought_route(brain_slug, thought_id):
         names.update(d)
 
     notes_html = node.data.get('notesHtml', "")
-    notes_html = re.sub(LINK_RE, lambda match: convert_link(match, brain, show_query_string), notes_html)
+    notes_html = re.sub(
+        LINK_RE,
+        lambda match: convert_link(match, brain, show_query_string),
+        notes_html)
     # render page
     return render_template(
         'index.html',
