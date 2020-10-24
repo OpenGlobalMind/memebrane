@@ -1,3 +1,5 @@
+from TiddlPy import wikiedit
+
 from flask import Flask, redirect, render_template, request
 import requests
 import json
@@ -73,6 +75,24 @@ def get_thought_route(brain_id=None, thought_id=None):
     names = {}
     for thought in thoughts:
         names[thought['id']] = thought['name']
+
+    # save into TiddlyWiki/Stroll
+    root = t['root']
+    text = render_template(
+        'tiddler.tw5',
+        names = names,
+        parents = root['parents'],
+        siblings = root['siblings'],
+        jumps = root['jumps'],
+        children = root['children'],
+        attachments = t['attachments'],
+    )
+    wiki = 'tiddlywiki.html'
+    tiddlers = [
+        {'title':names[thought_id], 'text':text}
+    ]
+    deletelist = []
+    wikiedit(wiki, tiddlers, deletelist, modi=u'python')
 
     # render page
     root = t['root']

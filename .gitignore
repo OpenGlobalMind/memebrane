@@ -1,5 +1,6 @@
 # data files
 *.json
+temp__.html
 
 # Python meta
 __pycache__/

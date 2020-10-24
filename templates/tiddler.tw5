@@ -1,0 +1,21 @@
+!! Children
+{% for child in children %}
+* [[{{ names[child] }}]]
+{% endfor %}
+
+!! Jumps
+{% for jump in jumps %}
+* [[{{ names[jump] }}]]
+{% endfor %}
+
+!! Links
+{% for attachment in attachments %}
+{% if attachment['type'] == 3 %}
+* [[{{ attachment['location'] }}|{{ attachment['location'] }}]]
+{% endif %}
+{% endfor %}
+
+!! Parents
+{% for parent in parents %}
+* [[{{ names[parent] }}]]
+{% endfor %}
