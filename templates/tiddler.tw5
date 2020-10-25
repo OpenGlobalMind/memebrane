@@ -1,21 +1,36 @@
-!! Children
-{% for child in children %}
-* [[{{ names[child] }}]]
-{% endfor %}
-
-!! Jumps
-{% for jump in jumps %}
-* [[{{ names[jump] }}]]
-{% endfor %}
-
-!! Links
-{% for attachment in attachments %}
-{% if attachment['type'] == 3 %}
-* [[{{ attachment['location'] }}|{{ attachment['location'] }}]]
-{% endif %}
-{% endfor %}
-
-!! Parents
-{% for parent in parents %}
+{% if parents|length > 1 %}
+  !! Parents
+  {% for parent in parents %}
 * [[{{ names[parent] }}]]
-{% endfor %}
+  {% endfor %}
+{% endif %}
+
+{% if ('<br>\n' != notes_html) %}
+!! Notes
+ <div>
+{{ notes_html }}
+ </div>
+{% endif %}
+
+{% if children|length > 1 %}
+  !! Children
+  {% for child in children %}
+* [[{{ names[child] }}]]
+  {% endfor %}
+{% endif %}
+
+{% if jumps|length > 1 %}
+  !! Jumps
+  {% for jump in jumps %}
+* [[{{ names[jump] }}]]
+  {% endfor %}
+{% endif %}
+
+{% if links|length > 1 %}
+  !! Links
+  {% for attachment in attachments %}
+    {% if attachment['type'] == 3 %}
+* [[{{ attachment['location'] }}|{{ attachment['name'] }}]]
+    {% endif %}
+  {% endfor %}
+{% endif %}

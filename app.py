@@ -86,13 +86,14 @@ def get_thought_route(brain_id=None, thought_id=None):
         jumps = root['jumps'],
         children = root['children'],
         attachments = t['attachments'],
+        notes_html = t['notesHtml'],
     )
     wiki = 'tiddlywiki.html'
     tiddlers = [
         {'title':names[thought_id], 'text':text}
     ]
     deletelist = []
-    wikiedit(wiki, tiddlers, deletelist, modi=u'python')
+    wikiedit(wiki, tiddlers, deletelist, modi=u'TheBrain')
 
     # render page
     root = t['root']
