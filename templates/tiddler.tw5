@@ -1,36 +1,36 @@
 {% if parents|length > 1 %}
-  !! Parents
-  {% for parent in parents %}
+!! Parents
+{% for parent in parents %}
 * [[{{ names[parent] }}]]
-  {% endfor %}
+{% endfor %}
 {% endif %}
 
 {% if ('<br>\n' != notes_html) %}
 !! Notes
- <div>
+ <div> {# indented to work around a TiddlPy glitch #}
 {{ notes_html }}
  </div>
 {% endif %}
 
 {% if children|length > 1 %}
-  !! Children
-  {% for child in children %}
+!! Children
+{% for child in children %}
 * [[{{ names[child] }}]]
-  {% endfor %}
+{% endfor %}
 {% endif %}
 
 {% if jumps|length > 1 %}
-  !! Jumps
-  {% for jump in jumps %}
+!! Jumps
+{% for jump in jumps %}
 * [[{{ names[jump] }}]]
-  {% endfor %}
+{% endfor %}
 {% endif %}
 
-{% if links|length > 1 %}
-  !! Links
-  {% for attachment in attachments %}
-    {% if attachment['type'] == 3 %}
+{% if attachments|length > 0 %}
+!! Links
+{% for attachment in attachments %}
+{% if attachment['type'] == 3 %}
 * [[{{ attachment['location'] }}|{{ attachment['name'] }}]]
-    {% endif %}
-  {% endfor %}
+{% endif %}
+{% endfor %}
 {% endif %}

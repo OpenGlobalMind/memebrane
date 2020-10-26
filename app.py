@@ -76,7 +76,7 @@ def get_thought_route(brain_id=None, thought_id=None):
     for thought in thoughts:
         names[thought['id']] = thought['name']
 
-    # save into TiddlyWiki/Stroll
+    # save into TiddlyWiki
     root = t['root']
     text = render_template(
         'tiddler.tw5',
