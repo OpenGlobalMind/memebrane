@@ -23,6 +23,10 @@ Install libraries:
 pip install -r requirements.txt
 ```
 
+```shell
+curl -LO https://github.com/ng110/TiddlPy/raw/5ced81288cbbb8f068a7f7c01c3f8ea3ce1d6b85/TiddlPy/TiddlPy.py
+```
+
 Run application:
 
 ```shell
@@ -32,6 +36,8 @@ flask run
 ## Usage
 
 Visit the application at http://localhost:5000/
+
+Thoughts are written to `tiddlywiki.html`, as well as displayed in the browser.
 
 By default, “siblings” and the full JSON thought object are not displayed.
 
