@@ -30,7 +30,7 @@
 !! Links
 {% for attachment in attachments %}
 {% if attachment['type'] == 3 %}
-* [[{{ attachment['location'] }}|{{ attachment['name'] }}]]
+* [[{{ attachment['name'] }}|{{ attachment['location'] }}]]
 {% endif %}
 {% endfor %}
 {% endif %}
