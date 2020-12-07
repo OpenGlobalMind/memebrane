@@ -192,7 +192,7 @@ def get_thought_route(brain_slug, thought_id):
         show_query_string=show_query_string,
         brain=brain,
         node=node.data,
-        is_tag=node.is_tag,
+        node_type=node.node_type.name,
         tags=linkst['tag'],
         parents=linkst['parent'],
         siblings=linkst['sibling'],

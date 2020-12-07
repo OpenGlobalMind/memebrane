@@ -22,7 +22,7 @@
 	{% endfor %}
       </p>
 {% endif %}
-      <h1>{{ node.name }}{% if is_tag %} <i>(Tag)</i>{% endif %}</h1>
+      <h1>{{ node.name }}{% if node_type != "Normal" %} <i>({{ node.node_type }})</i>{% endif %}</h1>
       {% if 'siblings' in show and siblings %}
 	<p>
 	  Siblings:
