@@ -256,12 +256,12 @@ class Link(Base):
             data=data,
             relation=LinkRelation._value2member_map_[data['relation']],
             meaning=LinkMeaning._value2member_map_[data['meaning']],
-            is_directed=normalize_minus_one(
-                data['direction']) & LinkDirection.IsDirected.value,
-            is_one_way=normalize_minus_one(
-                data['direction']) & LinkDirection.OneWay.value,
-            is_reversed=normalize_minus_one(
-                data['direction']) & LinkDirection.DirectionBA.value,
+            is_directed=bool(normalize_minus_one(
+                data['directin']) & LinkDirection.IsDirected.value),
+            is_one_way=bool(normalize_minus_one(
+                data['direction']) & LinkDirection.OneWay.value),
+            is_reversed=bool(normalize_minus_one(
+                data['direction']) & LinkDirection.DirectionBA.value),
             link_type=LinkType._value2member_map_[data['kind']],
             last_modified=parse_datetime(data['modificationDateTime']),
             parent_id=data['thoughtIdA'],
@@ -289,12 +289,12 @@ class Link(Base):
         self.child_id = data['thoughtIdB']
         self.relation = LinkRelation._value2member_map_[data['relation']]
         self.meaning = LinkMeaning._value2member_map_[data['meaning']]
-        self.is_directed = normalize_minus_one(
-            data['direction']) & LinkDirection.IsDirected.value
-        self.is_one_way = normalize_minus_one(
-            data['direction']) & LinkDirection.OneWay.value
-        self.is_reversed = normalize_minus_one(
-            data['direction']) & LinkDirection.DirectionBA.value
+        self.is_directed = bool(normalize_minus_one(
+            data['direction']) & LinkDirection.IsDirected.value)
+        self.is_one_way = bool(normalize_minus_one(
+            data['direction']) & LinkDirection.OneWay.value)
+        self.is_reversed = bool(normalize_minus_one(
+            data['direction']) & LinkDirection.DirectionBA.value)
         self.link_type = LinkType._value2member_map_[data['kind']]
 
 
