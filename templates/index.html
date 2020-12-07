@@ -59,7 +59,7 @@
   {% endfor %}
       </p>
   {% endif %}
-  {% if is_tag %}
+  {% if node_type == "Tag" %}
       <p>
         With tag:
       {% for id, name in of_tag.items() %}
