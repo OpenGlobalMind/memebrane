@@ -53,7 +53,8 @@ class Node(Base):
         Index("node_tags_idx", 'tags', postgresql_using='gin'),
     )
     id = Column(UUID, primary_key=True)
-    brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"), nullable=False)
+    brain_id = Column(UUID, ForeignKey(
+        Brain.id, ondelete="CASCADE"), nullable=False)
     data = Column(JSONB)
     tags = Column(ARRAY(UUID))
     name = Column(Unicode, nullable=False)
@@ -121,7 +122,7 @@ class Node(Base):
     @classmethod
     def create_from_json(cls, data, focus=False):
         data_time = parse_datetime(max(filter(None, [
-            data['modificationDateTime'], data['linksModificationDateTime']])))
+            data['modificationDateTime'], data.get('linksModificationDateTime', None)])))
         tags = data.pop('tags', None)
         if tags:
             tags = [t['id'] for t in tags]
@@ -162,13 +163,17 @@ class Node(Base):
 class Link(Base):
     __tablename__ = "link"
     id = Column(UUID, primary_key=True)
-    brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"), nullable=False)
+    brain_id = Column(UUID, ForeignKey(
+        Brain.id, ondelete="CASCADE"), nullable=False)
     data = Column(JSONB)
     last_modified = Column(DateTime)
     is_jump = Column(Boolean, default=False)
-    parent_id = Column(UUID, ForeignKey(Node.id, ondelete="CASCADE"), nullable=False, index=True)
-    child_id = Column(UUID, ForeignKey(Node.id, ondelete="CASCADE"), nullable=False, index=True)
-    parent = relationship(Node, foreign_keys=[parent_id], backref="child_links")
+    parent_id = Column(UUID, ForeignKey(
+        Node.id, ondelete="CASCADE"), nullable=False, index=True)
+    child_id = Column(UUID, ForeignKey(
+        Node.id, ondelete="CASCADE"), nullable=False, index=True)
+    parent = relationship(Node, foreign_keys=[
+                          parent_id], backref="child_links")
     child = relationship(Node, foreign_keys=[child_id], backref="parent_links")
 
     @classmethod
@@ -209,14 +214,16 @@ Node.parents = relationship(
 class Attachment(Base):
     __tablename__ = "attachment"
     id = Column(UUID, primary_key=True)
-    brain_id = Column(UUID, ForeignKey(Brain.id, ondelete="CASCADE"), nullable=False)
+    brain_id = Column(UUID, ForeignKey(
+        Brain.id, ondelete="CASCADE"), nullable=False)
     data = Column(JSONB)
     last_modified = Column(DateTime)
     location = Column(Unicode, nullable=False)
-    node_id = Column(UUID, ForeignKey(Node.id, ondelete="CASCADE"), nullable=False)
+    node_id = Column(UUID, ForeignKey(
+        Node.id, ondelete="CASCADE"), nullable=False)
     node = relationship(Node, backref="attachments")
 
-    @classmethod
+    @ classmethod
     def create_from_json(cls, data):
         return cls(
             id=data['id'],
@@ -238,6 +245,6 @@ class Attachment(Base):
         self.location = data['location']
         self.node_id = data['sourceId']
 
-    @property
+    @ property
     def name(self):
         return self.data['name']

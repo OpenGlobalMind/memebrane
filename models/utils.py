@@ -1,5 +1,5 @@
 from os.path import join, dirname
-import json
+import simplejson as json
 from datetime import timedelta, datetime
 import re
 import base64
@@ -17,7 +17,8 @@ BRAINS = {}
 
 def get_thought_data(brain_id, thought_id):
     print(thought_id)
-    r = requests.get('https://api.thebrain.com/api-v11/brains/' + brain_id + '/thoughts/' + thought_id + '/graph')
+    r = requests.get('https://api.thebrain.com/api-v11/brains/' +
+                     brain_id + '/thoughts/' + thought_id + '/graph')
     try:
         return r.json()
     except Exception as e:
@@ -31,8 +32,10 @@ def get_config_brains():
             CONFIG_BRAINS = json.load(f)
 
 
-LINK_RE = re.compile(r'\bbrain://(?:api\.thebrain\.com/(?P<brain>[-_A-Za-z0-9]{22})/)?(?P<node>[-_A-Za-z0-9]{22})/(?P<suffix>\w+)\b')
-UUID_RE = re.compile(r'^[0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12}$', re.I)
+LINK_RE = re.compile(
+    r'\bbrain://(?:api\.thebrain\.com/(?P<brain>[-_A-Za-z0-9]{22})/)?(?P<node>[-_A-Za-z0-9]{22})/(?P<suffix>\w+)\b')
+UUID_RE = re.compile(
+    r'^[0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12}$', re.I)
 
 
 def _b642uuid(b):
@@ -63,7 +66,8 @@ def get_brain(session, slug):
             brain = brains[0]
             session.merge(brain)
         else:
-            brain_data = [b for b in CONFIG_BRAINS.values() if b['brain'] == slug]
+            brain_data = [b for b in CONFIG_BRAINS.values()
+                          if b['brain'] == slug]
             brain = session.query(Brain).filter_by(id=slug).first()
             if not brain:
                 if brain_data:
@@ -133,7 +137,8 @@ def add_to_cache(session, data, force=False):
             for t in ['tags', 'notesHtml', 'notesMarkdown']:
                 if t in data:
                     node_data[t] = data[t]
-        session.add(Node.create_from_json(node_data, node_data['id'] == root_id))
+        session.add(Node.create_from_json(
+            node_data, node_data['id'] == root_id))
     session.flush()
     links = {l['id']: l for l in data.get("links", ())}
     links_in_cache = session.query(Link).filter(Link.id.in_(links.keys()))
@@ -162,13 +167,25 @@ def get_node(session, brain, id, cache_staleness=timedelta(days=1), force=False)
         if data:
             add_to_cache(session, data, force)
             if not node:
-                node = session.query(Node).filter_by(id=id, brain_id=brain.id).first()
+                node = session.query(Node).filter_by(
+                    id=id, brain_id=brain.id).first()
     return node, data
 
 
 def create_tables(engine):
     with engine.connect() as conn:
         Node.metadata.create_all(conn)
+
+
+def lcase1(str):
+    return str[0].lower() + str[1:]
+
+
+def lcase_json(json):
+    return {
+        lcase1(key): lcase_json(val) if isinstance(val, dict) else val
+        for key, val in json.items()
+    }
 
 
 if __name__ == '__main__':
