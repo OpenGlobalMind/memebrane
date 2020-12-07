@@ -134,30 +134,30 @@ class Node(Base):
             parent_query = session.query(
                 literal('parent'), *entities).join(
                 Link, Node.child_links).filter(
-                (Link.child_id == self.id) & ~Link.is_jump)
+                (Link.child_id == self.id) & (Link.relation != LinkRelation.Jump))
         if parents:
             queries.append(parent_query)
         if children:
             queries.append(session.query(
                 literal('child'), *entities).join(
                 Link, Node.parent_links).filter(
-                (Link.parent_id == self.id) & ~Link.is_jump))
+                (Link.parent_id == self.id) & (Link.relation != LinkRelation.Jump)))
         if siblings:
             subquery = parent_query.with_entities(Node.id).subquery()
             queries.append(session.query(
                 literal('sibling'), *entities).join(
                 Link, Node.parent_links).filter(
                 Link.parent_id.in_(subquery) &
-                (Node.id != self.id) & ~Link.is_jump))
+                (Node.id != self.id) & (Link.relation != LinkRelation.Jump)))
         if jumps:
             queries.append(session.query(
                 literal('jump'), *entities).join(
                 Link, Node.parent_links).filter(
-                (Link.parent_id == self.id) & Link.is_jump))
+                (Link.parent_id == self.id) & (Link.relation == LinkRelation.Jump)))
             queries.append(session.query(
                 literal('jump'), *entities).join(
                 Link, Node.child_links).filter(
-                (Link.child_id == self.id) & Link.is_jump))
+                (Link.child_id == self.id) & (Link.relation == LinkRelation.Jump)))
         if tags and self.tags:
             query = session.query(
                 literal('tag'), *entities).filter(Node.id.in_(self.tags))
@@ -234,7 +234,6 @@ class Link(Base):
         Brain.id, ondelete="CASCADE"), nullable=False)
     data = Column(JSONB)
     last_modified = Column(DateTime)
-    is_jump = Column(Boolean, default=False)
     relation = Column(Enum(LinkRelation))
     meaning = Column(Enum(LinkMeaning))
     link_type = Column(Enum(LinkType))
@@ -255,7 +254,6 @@ class Link(Base):
             id=data['id'],
             brain_id=data['brainId'],
             data=data,
-            is_jump=data['relation'] != 1,
             relation=LinkRelation._value2member_map_[data['relation']],
             meaning=LinkMeaning._value2member_map_[data['meaning']],
             is_directed=normalize_minus_one(
@@ -284,7 +282,6 @@ class Link(Base):
         data_time = parse_datetime(data['modificationDateTime'])
         if data_time <= self.last_modified and not force:
             return
-        self.is_jump = data['relation'] != 1
         self.brain_id = data['brainId']
         self.data = data
         self.last_modified = data_time
