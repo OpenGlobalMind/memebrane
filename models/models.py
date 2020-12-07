@@ -20,6 +20,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, deferred
 from sqlalchemy.orm.attributes import flag_modified
 import requests
+from sqlalchemy.sql.operators import is_distinct_from
 
 if True:
     from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
@@ -61,6 +62,10 @@ class LinkMeaning(enum.Enum):
 class LinkType(enum.Enum):
     Normal = 1
     Type = 2
+
+
+def normalize_minus_one(v, default=1):
+    return default if v == -1 else v
 
 
 class AttachmentType(enum.Enum):
@@ -230,6 +235,12 @@ class Link(Base):
     data = Column(JSONB)
     last_modified = Column(DateTime)
     is_jump = Column(Boolean, default=False)
+    relation = Column(Enum(LinkRelation))
+    meaning = Column(Enum(LinkMeaning))
+    link_type = Column(Enum(LinkType))
+    is_directed = Column(Boolean, server_default='true')
+    is_one_way = Column(Boolean, server_default='false')
+    is_reversed = Column(Boolean, server_default='false')
     parent_id = Column(UUID, ForeignKey(
         Node.id, ondelete="CASCADE"), nullable=False, index=True)
     child_id = Column(UUID, ForeignKey(
@@ -245,6 +256,15 @@ class Link(Base):
             brain_id=data['brainId'],
             data=data,
             is_jump=data['relation'] != 1,
+            relation=LinkRelation._value2member_map_[data['relation']],
+            meaning=LinkMeaning._value2member_map_[data['meaning']],
+            is_directed=normalize_minus_one(
+                data['direction']) & LinkDirection.IsDirected.value,
+            is_one_way=normalize_minus_one(
+                data['direction']) & LinkDirection.OneWay.value,
+            is_reversed=normalize_minus_one(
+                data['direction']) & LinkDirection.DirectionBA.value,
+            link_type=LinkType._value2member_map_[data['kind']],
             last_modified=parse_datetime(data['modificationDateTime']),
             parent_id=data['thoughtIdA'],
             child_id=data['thoughtIdB']
@@ -270,6 +290,15 @@ class Link(Base):
         self.last_modified = data_time
         self.parent_id = data['thoughtIdA']
         self.child_id = data['thoughtIdB']
+        self.relation = LinkRelation._value2member_map_[data['relation']]
+        self.meaning = LinkMeaning._value2member_map_[data['meaning']]
+        self.is_directed = normalize_minus_one(
+            data['direction']) & LinkDirection.IsDirected.value
+        self.is_one_way = normalize_minus_one(
+            data['direction']) & LinkDirection.OneWay.value
+        self.is_reversed = normalize_minus_one(
+            data['direction']) & LinkDirection.DirectionBA.value
+        self.link_type = LinkType._value2member_map_[data['kind']]
 
 
 Node.children = relationship(
@@ -292,6 +321,7 @@ class Attachment(Base):
     location = Column(Unicode, nullable=False)
     node_id = Column(UUID, ForeignKey(
         Node.id, ondelete="CASCADE"), nullable=False)
+    att_type = Column(Enum(AttachmentType))
     content = deferred(Column(Binary))
     node = relationship(Node, backref="attachments")
     brain = relationship(Brain, foreign_keys=[brain_id])
@@ -314,6 +344,7 @@ class Attachment(Base):
             content=content,
             last_modified=parse_datetime(data['modificationDateTime']),
             location=data['location'],
+            att_type=AttachmentType._value2member_map_[data['type']],
             node_id=data['sourceId']
         )
 
@@ -327,6 +358,7 @@ class Attachment(Base):
         self.last_modified = data_time
         self.location = data['location']
         self.node_id = data['sourceId']
+        self.att_type = AttachmentType._value2member_map_[data['type']]
         if content:
             self.content = content
 
