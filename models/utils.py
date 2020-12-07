@@ -31,6 +31,7 @@ def get_config_brains():
     if CONFIG_BRAINS is None:
         with open(join(dirname(dirname(__file__)), 'brains.json')) as f:
             CONFIG_BRAINS = json.load(f)
+    return CONFIG_BRAINS
 
 
 LINK_RE = re.compile(
