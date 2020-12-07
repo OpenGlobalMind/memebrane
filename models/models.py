@@ -16,6 +16,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.sql.sqltypes import BLOB
 
 
 if True:
@@ -138,10 +139,19 @@ class Node(Base):
             tags=tags
         )
 
+    @ classmethod
+    def create_or_update_from_json(cls, session, data, force=False):
+        i = session.query(cls).filter_by(id=data["id"]).one()
+        if i:
+            i.update_from_json(data, force)
+        else:
+            i = cls.create_from_json(data)
+        return i
+
     def update_from_json(self, data, focus=False, force=False):
         assert data['id'] == self.id
         data_time = parse_datetime(max(filter(None, [
-            data['modificationDateTime'], data['linksModificationDateTime']])))
+            data['modificationDateTime'], data.get('linksModificationDateTime', None)])))
         if focus and not self.read_as_focus:
             force = True
             self.read_as_focus = True
@@ -188,6 +198,15 @@ class Link(Base):
             child_id=data['thoughtIdB']
         )
 
+    @ classmethod
+    def create_or_update_from_json(cls, session, data, force=False):
+        i = session.query(cls).filter_by(id=data["id"]).one()
+        if i:
+            i.update_from_json(data, force)
+        else:
+            i = cls.create_from_json(data)
+        return i
+
     def update_from_json(self, data, force=False):
         assert data['id'] == self.id
         data_time = parse_datetime(data['modificationDateTime'])
@@ -221,20 +240,31 @@ class Attachment(Base):
     location = Column(Unicode, nullable=False)
     node_id = Column(UUID, ForeignKey(
         Node.id, ondelete="CASCADE"), nullable=False)
+    content = Column(BLOB)
     node = relationship(Node, backref="attachments")
 
     @ classmethod
-    def create_from_json(cls, data):
+    def create_or_update_from_json(cls, session, data, content=None, force=False):
+        i = session.query(cls).filter_by(id=data["id"]).one()
+        if i:
+            i.update_from_json(data, content, force)
+        else:
+            i = cls.create_from_json(data, content)
+        return i
+
+    @ classmethod
+    def create_from_json(cls, data, content=None):
         return cls(
             id=data['id'],
             brain_id=data['brainId'],
             data=data,
+            content=content,
             last_modified=parse_datetime(data['modificationDateTime']),
             location=data['location'],
             node_id=data['sourceId']
         )
 
-    def update_from_json(self, data, force=False):
+    def update_from_json(self, data, content=None, force=False):
         assert data['id'] == self.id
         data_time = parse_datetime(data['modificationDateTime'])
         if data_time <= self.last_modified and not force:
@@ -244,6 +274,8 @@ class Attachment(Base):
         self.last_modified = data_time
         self.location = data['location']
         self.node_id = data['sourceId']
+        if content:
+            self.content = content
 
     @ property
     def name(self):

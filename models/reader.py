@@ -20,21 +20,28 @@ def read_brain(base: Path, session):
             if attf.exists():
                 with attf.open() as f2:
                     node["notesMarkdown"] = f2.read()
-            attf = node_base.joinpath("Notes").joinpath("notes.html")
+            attf = node_base.joinpath("Notes", "notes.html")
             if attf.exists():
                 with attf.open() as f2:
                     node["notesHtml"] = f2.read()
-            node = Node.create_from_json(lcase_json(node))
+            node = Node.create_or_update_from_json(session, lcase_json(node))
             session.add(node)
     with open(base.joinpath("links.json")) as f:
         for line in f:
             link = json.loads(line)
-            link = Link.create_from_json(lcase_json(link))
+            link = Link.create_or_update_from_json(session, lcase_json(link))
             session.add(link)
     with open(base.joinpath("attachments.json")) as f:
         for line in f:
             att = json.loads(line)
-            att = Attachment.create_from_json(lcase_json(att))
+            contentf = base.joinpath(att["SourceId"], "Notes", att["Location"])
+            if contentf.exists():
+                with contentf.open(mode='rb') as f2:
+                    content = f2.read()
+            else:
+                content = None
+            att = Attachment.create_or_update_from_json(
+                session, lcase_json(att), content)
             session.add(att)
 
 

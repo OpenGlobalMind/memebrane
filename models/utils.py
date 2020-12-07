@@ -160,7 +160,8 @@ def add_to_cache(session, data, force=False):
     attachments_in_cache = session.query(Attachment).filter(
         Attachment.id.in_(attachments.keys()))
     for attachment in attachments_in_cache:
-        attachment.update_from_json(attachments.pop(attachment.id), force)
+        attachment.update_from_json(
+            attachments.pop(attachment.id), force=force)
     for adata in attachments.values():
         session.add(Attachment.create_from_json(adata))
     session.commit()
