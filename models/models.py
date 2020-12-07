@@ -257,7 +257,7 @@ class Link(Base):
             relation=LinkRelation._value2member_map_[data['relation']],
             meaning=LinkMeaning._value2member_map_[data['meaning']],
             is_directed=bool(normalize_minus_one(
-                data['directin']) & LinkDirection.IsDirected.value),
+                data['direction']) & LinkDirection.IsDirected.value),
             is_one_way=bool(normalize_minus_one(
                 data['direction']) & LinkDirection.OneWay.value),
             is_reversed=bool(normalize_minus_one(
