@@ -1,10 +1,12 @@
 import simplejson as json
 import re
+from mimetypes import guess_type
 from configparser import ConfigParser
 
 from flask import Flask, redirect, render_template, request, Response
 from flask_sqlalchemy import SQLAlchemy
 import requests
+from sqlalchemy.orm import undefer
 
 from models.models import Node, Brain, Link, Attachment
 from models.utils import get_brain, get_node, add_brain, convert_link, LINK_RE
@@ -47,7 +49,8 @@ def base_brain(brain_slug):
         return redirect(f'/brain/{brain.safe_slug}/thought/{brain.base_id}', code=302)
     nodes = db.session.query(Node.data).filter_by(brain_id=brain.id).all()
     links = db.session.query(Link.data).filter_by(brain_id=brain.id).all()
-    attachments = db.session.query(Attachment.data).filter_by(brain_id=brain.id).all()
+    attachments = db.session.query(
+        Attachment.data).filter_by(brain_id=brain.id).all()
     return dict(nodes=nodes, links=links, attachments=attachments)
 
 
@@ -63,7 +66,7 @@ def search(brain_slug):
         return Response("Please add a ?query parameter", status=400)
     nodes = db.session.query(Node.id, Node.name).filter(
         (Node.brain == brain) & (Node.name.match(terms))
-        ).offset(start).limit(limit).all()
+    ).offset(start).limit(limit).all()
     prev_link = next_link = None
     if len(nodes) == limit:
         next_start = start + limit
@@ -93,7 +96,8 @@ def url():
     if url.startswith('https://app.thebrain.com/'):
         match = BRAIN_URL_RE.match(url)
         if match is not None:
-            brain_id, thought_id = match.group('brain_id'), match.group('thought_id')
+            brain_id, thought_id = match.group(
+                'brain_id'), match.group('thought_id')
             add_brain(db.session, brain_id, slug, name, thought_id)
             return redirect(f'/brain/{brain_id}/thought/{thought_id}', code=302)
 
@@ -145,7 +149,8 @@ def get_thought_route(brain_slug, thought_id):
 
     if brain.slug and brain_slug == brain.id:
         # prefer the short form
-        query_string = ('?' + request.query_string.decode('ascii')) if request.query_string else ''
+        query_string = ('?' + request.query_string.decode('ascii')
+                        ) if request.query_string else ''
         return redirect(f'/brain/{brain.slug}/thought/{thought_id}{query_string}', code=302)
 
     node, data = get_node(db.session, brain, thought_id, force=force)
@@ -163,7 +168,8 @@ def get_thought_route(brain_slug, thought_id):
             # TODO: Store in node
             root = dict(attachments=[att.id for att in node.attachments])
             data = dict(root=root, notesHtml="", notesMarkdown="", tags=[])
-        linkst = dict(parent={}, child={}, sibling={}, jump={}, tag={}, of_tag={})
+        linkst = dict(parent={}, child={}, sibling={},
+                      jump={}, tag={}, of_tag={})
         for (ltype, id, name) in node.get_neighbour_data(
                 db.session, siblings='siblings' in show):
             linkst[ltype][id] = name
@@ -198,3 +204,28 @@ def get_thought_route(brain_slug, thought_id):
         notes_html=notes_html,
         notes_markdown=node.data.get('notesMarkdown', ""),
     )
+
+
+@app.route("/brain/<brain_slug>/thought/<thought_id>/md-images/<location>")
+def get_image_content(brain_slug, thought_id, location):
+    brain = get_brain(db.session, brain_slug)
+    if not brain:
+        return Response("No such brain", status=404)
+    att = db.session.query(Attachment).filter_by(
+        brain=brain,
+        node_id=thought_id,
+        location=location
+    ).options(undefer(Attachment.content)).one()
+    if not att:
+        node, data = get_node(db.session, brain, thought_id)
+        if not node:
+            return Response("No such node", status=404)
+        atts = [a for a in node.attachments if a.location == location]
+        if not atts:
+            return Response("No such image", status=404)
+        att = atts[0]
+    att.populate_content()
+    if not att.content:
+        # maybe a permission issue? redirect to brain
+        return Response(location=att.brain_uri(), status=303)
+    return Response(att.content, mimetype=guess_type(location)[0])

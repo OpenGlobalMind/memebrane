@@ -13,9 +13,9 @@ from sqlalchemy import (
     Text,
     literal,
 )
-from sqlalchemy.ext.declarative import declarative_base, deferred
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred
 from sqlalchemy.orm.attributes import flag_modified
 import requests
 
@@ -242,6 +242,7 @@ class Attachment(Base):
         Node.id, ondelete="CASCADE"), nullable=False)
     content = deferred(Column(Binary))
     node = relationship(Node, backref="attachments")
+    brain = relationship(Brain, foreign_keys=[brain_id])
 
     @ classmethod
     def create_or_update_from_json(cls, session, data, content=None, force=False):
@@ -277,13 +278,15 @@ class Attachment(Base):
         if content:
             self.content = content
 
+    def brain_uri(self):
+        return f"https://api.thebrain.com/api-v11/brains/{self.brain_id}/thoughts/{self.node_id}/md-images/{self.location}"
+
     def populate_content(self, force=False):
         if self.content and not force:
             return
         if self.data["type"] in (1, 3, 4):  # links and notes
             return
-        contentr = requests.get(
-            f"https://api.thebrain.com/api-v11/brains/{self.brain_id}/thoughts/{self.node_id}/md-images/{self.location}")
+        contentr = requests.get(self.brain_uri())
         if contentr.ok:
             self.content = contentr.content
 
