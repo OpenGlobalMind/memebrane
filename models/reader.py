@@ -4,7 +4,7 @@ from sys import argv
 import simplejson as json
 
 from .models import Node, Link, Attachment
-from .utils import get_brain, get_session, lcase_json, get_engine, get_session
+from .utils import get_brain, get_session, lcase_json, engine_from_config, get_session
 
 
 def read_brain(base: Path, session):
@@ -40,7 +40,7 @@ def read_brain(base: Path, session):
 
 if __name__ == '__main__':
     fname = argv[1]
-    engine = get_engine()
+    engine = engine_from_config()
     session = get_session(engine)
     read_brain(Path(fname), session)
     session.commit()

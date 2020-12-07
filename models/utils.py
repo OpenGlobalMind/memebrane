@@ -1,3 +1,4 @@
+from configparser import ConfigParser
 from os.path import join, dirname
 import simplejson as json
 from datetime import timedelta, datetime
@@ -103,6 +104,12 @@ def add_brain(session, id, slug=None, name=None, base_id=None):
 def get_engine(password='memebrane', user='memebrane', host='localhost', db='memebrane', port=5432):
     # TODO eliminate
     return create_engine(f'postgresql://{user}:{password}@{host}:{port}/{db}')
+
+
+def engine_from_config():
+    config = ConfigParser()
+    config.read('config.ini')
+    return create_engine(config['memebrane']['dburl'])
 
 
 def get_session(engine):
