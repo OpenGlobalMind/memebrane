@@ -198,7 +198,7 @@ class Node(Base):
 
     @ classmethod
     def create_or_update_from_json(cls, session, data, force=False):
-        i = session.query(cls).filter_by(id=data["id"]).one()
+        i = session.query(cls).filter_by(id=data["id"]).first()
         if i:
             i.update_from_json(data, force)
         else:
@@ -270,7 +270,7 @@ class Link(Base):
 
     @ classmethod
     def create_or_update_from_json(cls, session, data, force=False):
-        i = session.query(cls).filter_by(id=data["id"]).one()
+        i = session.query(cls).filter_by(id=data["id"]).first()
         if i:
             i.update_from_json(data, force)
         else:
@@ -325,7 +325,7 @@ class Attachment(Base):
 
     @ classmethod
     def create_or_update_from_json(cls, session, data, content=None, force=False):
-        i = session.query(cls).filter_by(id=data["id"]).one()
+        i = session.query(cls).filter_by(id=data["id"]).first()
         if i:
             i.update_from_json(data, content, force)
         else:
