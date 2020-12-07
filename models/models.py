@@ -2,6 +2,7 @@ from datetime import datetime
 
 from isodate import parse_datetime
 from sqlalchemy import (
+    Binary,
     Boolean,
     Column,
     ForeignKey,
@@ -12,12 +13,11 @@ from sqlalchemy import (
     Text,
     literal,
 )
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.declarative import declarative_base, deferred
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.attributes import flag_modified
-from sqlalchemy.sql.sqltypes import BLOB
-
+import requests
 
 if True:
     from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
@@ -240,7 +240,7 @@ class Attachment(Base):
     location = Column(Unicode, nullable=False)
     node_id = Column(UUID, ForeignKey(
         Node.id, ondelete="CASCADE"), nullable=False)
-    content = Column(BLOB)
+    content = deferred(Column(Binary))
     node = relationship(Node, backref="attachments")
 
     @ classmethod
@@ -276,6 +276,16 @@ class Attachment(Base):
         self.node_id = data['sourceId']
         if content:
             self.content = content
+
+    def populate_content(self, force=False):
+        if self.content and not force:
+            return
+        if self.data["type"] in (1, 3, 4):  # links and notes
+            return
+        contentr = requests.get(
+            f"https://api.thebrain.com/api-v11/brains/{self.brain_id}/thoughts/{self.node_id}/md-images/{self.location}")
+        if contentr.ok:
+            self.content = contentr.content
 
     @ property
     def name(self):
