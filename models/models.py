@@ -224,7 +224,7 @@ class Node(Base):
         flag_modified(self, 'data')
         self.name = data['name']
         self.last_modified = data_time
-        self.node_type = NodeType._value2member_map_[data.get('kind', 1)],
+        self.node_type = NodeType._value2member_map_[data.get('kind', 1)]
 
 
 class Link(Base):
@@ -373,4 +373,4 @@ class Attachment(Base):
 
     @ property
     def name(self):
-        return self.data['name']
+        return self.data.get('name', self.data['location'])
