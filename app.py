@@ -7,9 +7,29 @@ from flask import Flask, redirect, render_template, request, Response
 from flask_sqlalchemy import SQLAlchemy
 import requests
 from sqlalchemy.orm import undefer
+from sqlalchemy.sql import func
 
 from models.models import Node, Brain, Link, Attachment
 from models.utils import get_brain, get_node, add_brain, convert_link, LINK_RE
+
+postgres_language_configurations = {
+    'da': 'danish',
+    'nl': 'dutch',
+    'en': 'english',
+    'fi': 'finnish',
+    'fr': 'french',
+    'de': 'german',
+    'hu': 'hungarian',
+    'it': 'italian',
+    'no': 'norwegian',
+    'pt': 'portuguese',
+    'ro': 'romanian',
+    'ru': 'russian',
+    'es': 'spanish',
+    'sv': 'swedish',
+    'tr': 'turkish',
+    'simple': 'simple',
+}
 
 
 config = ConfigParser()
@@ -64,8 +84,20 @@ def search(brain_slug):
     start = int(request.args.get('start', 0))
     if not terms:
         return Response("Please add a ?query parameter", status=400)
+    filter = Node.name.match(terms)
+    query = db.session.query(Node.id, Node.name)
+    if request.args.get('notes', None):
+        query = query.join(Attachment)
+        lang = request.args.get('lang', None)
+        pglang = postgres_language_configurations.get(lang, 'simple')
+        tfilter = Attachment.text_content.match(
+            func.websearch_to_tsquery(pglang, query))
+        if lang:
+            filter = filter | (Attachment.inferred_locale == lang & tfilter)
+        else:
+            filter = filter | tfilter
     nodes = db.session.query(Node.id, Node.name).filter(
-        (Node.brain == brain) & (Node.name.match(terms))
+        (Node.brain == brain) & filter
     ).offset(start).limit(limit).all()
     prev_link = next_link = None
     if len(nodes) == limit:
@@ -192,7 +224,8 @@ def get_thought_route(brain_slug, thought_id):
         show_query_string=show_query_string,
         brain=brain,
         node=node.data,
-        node_type=node.node_type.name,
+        is_tag=node.is_tag,
+        is_type=node.is_type,
         tags=linkst['tag'],
         parents=linkst['parent'],
         siblings=linkst['sibling'],

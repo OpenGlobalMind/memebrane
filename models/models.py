@@ -124,7 +124,9 @@ class Node(Base):
     last_read = Column(DateTime)
     last_modified = Column(DateTime)
     read_as_focus = Column(Boolean, default=False)
-    node_type = Column(Enum(NodeType))
+    is_tag = Column(Boolean)
+    is_type = Column(Boolean)
+    private = Column(Boolean)
     brain = relationship(Brain, foreign_keys=[brain_id])
     # siblings = relationship("Node", secondary="Link")
 
@@ -197,7 +199,9 @@ class Node(Base):
             last_read=datetime.now(),
             last_modified=data_time,
             read_as_focus=focus,
-            node_type=NodeType._value2member_map_[data.get('kind', 1)],
+            is_type=bool(data['kind'] & NodeType.Type.value),
+            is_tag=bool(data['kind'] & NodeType.Tag.value),
+            private=data['aCType'],
             tags=tags
         )
 
@@ -229,7 +233,9 @@ class Node(Base):
         flag_modified(self, 'data')
         self.name = data['name']
         self.last_modified = data_time
-        self.node_type = NodeType._value2member_map_[data.get('kind', 1)]
+        self.is_type = bool(data['kind'] & NodeType.Type.value)
+        self.is_tag = bool(data['kind'] & NodeType.Tag.value)
+        self.private = data['aCType']
 
 
 class Link(Base):
@@ -348,35 +354,45 @@ class Attachment(Base):
             i = cls.create_from_json(data, content)
         return i
 
-    @ classmethod
-    def create_from_json(cls, data, content=None):
+    @ staticmethod
+    def maybe_text(data, content):
         att_type=AttachmentType._value2member_map_[data['type']]
         text_content = None
         inferred_locale = None
         if att_type == AttachmentType.NotesV9 or (
                 att_type == AttachmentType.InternalFile and
                 data.get("noteType", 0) == 4):
-            text_content = content
-            stripped_text = cleaner.clean(text_content, tags=[], strip=True
+            text_content = content.decode('utf-8')
+            if text_content[0] == u'\ufeff':
+                text_content = text_content[1:]
+            content = None
+            stripped_text = cleaner.clean(text_content
                 ) if att_type == AttachmentType.NotesV9 else text_content
-            inferred_locale = detect_langs(stripped_text)
+            langs = detect_langs(stripped_text)
+            inferred_locale = langs[0].lang if langs else "zxx"
+        return (content, text_content, inferred_locale)
 
+    @ classmethod
+    def create_from_json(cls, data, content=None):
+        content, text_content, inferred_locale = cls.maybe_text(data, content)
         return cls(
             id=data['id'],
             brain_id=data['brainId'],
             data=data,
             content=content,
+            text_content=text_content,
+            inferred_locale=inferred_locale,
             last_modified=parse_datetime(data['modificationDateTime']),
             location=data['location'],
-            att_type=att_type,
+            att_type=AttachmentType._value2member_map_[data['type']],
             node_id=data['sourceId']
         )
 
     def update_from_json(self, data, content=None, force=False):
         assert data['id'] == self.id
         data_time = parse_datetime(data['modificationDateTime'])
-        if data_time <= self.last_modified and not force:
-            return
+        # if data_time <= self.last_modified and not force:
+        #     return
         self.brain_id = data['brainId']
         self.data = data
         self.last_modified = data_time
@@ -384,7 +400,8 @@ class Attachment(Base):
         self.node_id = data['sourceId']
         self.att_type = AttachmentType._value2member_map_[data['type']]
         if content:
-            self.content = content
+            (self.content, self.text_content, self.inferred_locale
+            ) = self.maybe_text(data, content)
 
     def brain_uri(self):
         return f"https://api.thebrain.com/api-v11/brains/{self.brain_id}/thoughts/{self.node_id}/md-images/{self.location}"

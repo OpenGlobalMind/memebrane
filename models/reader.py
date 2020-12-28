@@ -8,10 +8,18 @@ from .utils import get_brain, get_session, lcase_json, engine_from_config, get_s
 
 
 def read_brain(base: Path, session):
-    with open(base.joinpath("meta.json")) as f:
-        meta = json.load(f)
-        brain_id = meta["BrainId"]
-        brain = get_brain(session, brain_id)
+    if base.joinpath("meta.json").exists():
+        with open(base.joinpath("meta.json")) as f:
+            meta = json.load(f)
+            brain_id = meta["BrainId"]
+            brain = get_brain(session, brain_id)
+    else:
+        with open(base.joinpath("thoughts.json")) as f:
+            line = next(f)
+            meta = json.loads(line)
+            brain_id = meta["BrainId"]
+            brain = get_brain(session, brain_id)
+
     with open(base.joinpath("thoughts.json")) as f:
         for line in f:
             node = json.loads(line)
@@ -34,20 +42,28 @@ def read_brain(base: Path, session):
     with open(base.joinpath("attachments.json")) as f:
         for line in f:
             att = json.loads(line)
-            contentf = base.joinpath(att["SourceId"], "Notes", att["Location"])
+            contentf = base.joinpath(att["SourceId"], att["Location"])
             if contentf.exists():
+                print(contentf)
                 with contentf.open(mode='rb') as f2:
                     content = f2.read()
             else:
-                content = None
+                contentf = base.joinpath(att["SourceId"], "Notes", att["Location"])
+                if contentf.exists():
+                    print(contentf)
+                    with contentf.open(mode='rb') as f2:
+                        content = f2.read()
+                else:
+                    #print (contentf)less 
+                    content = None
             att = Attachment.create_or_update_from_json(
                 session, lcase_json(att), content)
+            print(len(att.content or att.text_content or ''))
             session.add(att)
 
 
 if __name__ == '__main__':
     fname = argv[1]
-    engine = engine_from_config()
-    session = get_session(engine)
+    session = get_session()
     read_brain(Path(fname), session)
     session.commit()
