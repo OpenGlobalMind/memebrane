@@ -113,7 +113,8 @@ def engine_from_config():
     return create_engine(config['memebrane']['dburl'])
 
 
-def get_session(engine):
+def get_session(engine=None):
+    engine = engine or engine_from_config()
     Session = sessionmaker(bind=engine)
     return Session()
 

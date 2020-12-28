@@ -1,5 +1,6 @@
 from datetime import datetime
 import enum
+from logging import info
 
 from isodate import parse_datetime
 from sqlalchemy import (
@@ -15,12 +16,15 @@ from sqlalchemy import (
     literal,
     Enum,
 )
+from sqlalchemy.exc import InterfaceError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, deferred
 from sqlalchemy.orm.attributes import flag_modified
 import requests
 from sqlalchemy.sql.operators import is_distinct_from
+from langdetect import detect_langs
+from bleach import Cleaner
 
 if True:
     from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
@@ -29,6 +33,7 @@ else:
     JSONB = Text
 
 
+cleaner = Cleaner(tags=[], strip=True, strip_comments=True)
 class NodeType(enum.Enum):
     Normal = 1
     Type = 2
@@ -320,8 +325,19 @@ class Attachment(Base):
         Node.id, ondelete="CASCADE"), nullable=False)
     att_type = Column(Enum(AttachmentType))
     content = deferred(Column(Binary))
+    text_content = Column(Text)
+    inferred_locale = Column(String(3))
     node = relationship(Node, backref="attachments")
     brain = relationship(Brain, foreign_keys=[brain_id])
+    __table_args__ = (
+        Index("attachment_text_idx",
+              func.to_tsvector('simple', text_content),
+              postgresql_using='gin'),
+        Index("attachment_text_en_idx",
+              func.to_tsvector('english', text_content),
+              postgresql_using='gin',
+              postgres_where=inferred_locale=='en')
+    )
 
     @ classmethod
     def create_or_update_from_json(cls, session, data, content=None, force=False):
@@ -334,6 +350,17 @@ class Attachment(Base):
 
     @ classmethod
     def create_from_json(cls, data, content=None):
+        att_type=AttachmentType._value2member_map_[data['type']]
+        text_content = None
+        inferred_locale = None
+        if att_type == AttachmentType.NotesV9 or (
+                att_type == AttachmentType.InternalFile and
+                data.get("noteType", 0) == 4):
+            text_content = content
+            stripped_text = cleaner.clean(text_content, tags=[], strip=True
+                ) if att_type == AttachmentType.NotesV9 else text_content
+            inferred_locale = detect_langs(stripped_text)
+
         return cls(
             id=data['id'],
             brain_id=data['brainId'],
@@ -341,7 +368,7 @@ class Attachment(Base):
             content=content,
             last_modified=parse_datetime(data['modificationDateTime']),
             location=data['location'],
-            att_type=AttachmentType._value2member_map_[data['type']],
+            att_type=att_type,
             node_id=data['sourceId']
         )
 
