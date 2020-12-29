@@ -288,14 +288,16 @@ class Link(Base):
             brain_id=data['brainId'],
             data=data,
             relation=LinkRelation._value2member_map_[data['relation']],
-            meaning=LinkMeaning._value2member_map_[data['meaning']],
+            meaning=LinkMeaning._value2member_map_[data['meaning']
+                ] if data['meaning'] else None,
             is_directed=bool(normalize_minus_one(
                 data['direction']) & LinkDirection.IsDirected.value),
             is_one_way=bool(normalize_minus_one(
                 data['direction']) & LinkDirection.OneWay.value),
             is_reversed=bool(normalize_minus_one(
                 data['direction']) & LinkDirection.DirectionBA.value),
-            link_type=LinkType._value2member_map_[data['kind']],
+            link_type=LinkType._value2member_map_[data['kind']
+                ] if data['kind'] else None,
             last_modified=parse_datetime(data['modificationDateTime']),
             parent_id=data['thoughtIdA'],
             child_id=data['thoughtIdB']
@@ -321,14 +323,16 @@ class Link(Base):
         self.parent_id = data['thoughtIdA']
         self.child_id = data['thoughtIdB']
         self.relation = LinkRelation._value2member_map_[data['relation']]
-        self.meaning = LinkMeaning._value2member_map_[data['meaning']]
+        self.meaning = LinkMeaning._value2member_map_[data['meaning']
+            ] if data['meaning'] else None
         self.is_directed = bool(normalize_minus_one(
             data['direction']) & LinkDirection.IsDirected.value)
         self.is_one_way = bool(normalize_minus_one(
             data['direction']) & LinkDirection.OneWay.value)
         self.is_reversed = bool(normalize_minus_one(
             data['direction']) & LinkDirection.DirectionBA.value)
-        self.link_type = LinkType._value2member_map_[data['kind']]
+        self.link_type = LinkType._value2member_map_[data['kind']
+            ] if data['kind'] else None
 
 
 Node.children = relationship(
@@ -390,7 +394,6 @@ class Attachment(Base):
         self.content = None
 
     def set_content(self, content):
-        att_type=AttachmentType._value2member_map_[data['type']]
         text_content = None
         inferred_locale = None
         if self.att_type == AttachmentType.NotesV9 or (
