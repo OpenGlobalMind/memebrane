@@ -131,20 +131,26 @@ class Node(Base):
     brain = relationship(Brain, foreign_keys=[brain_id])
     # siblings = relationship("Node", secondary="Link")
 
-    def get_html_notes(self, session):
-        c = session.query(Attachment.text_content).filter_by(
+    def get_html_notes_att(self, session):
+        return session.query(Attachment).filter_by(
             node=self, att_type=AttachmentType.NotesV9
         ).first()
-        if c:
-            return c[0]
 
-    def get_md_notes(self, session):
-        c = session.query(Attachment.text_content).filter(
+    def get_html_notes(self, session):
+        att = self.get_html_notes_att(session)
+        if att:
+            return att.text_content
+
+    def get_md_notes_att(self, session):
+        return session.query(Attachment).filter(
             Attachment.node == self, Attachment.att_type == AttachmentType.InternalFile,
             Attachment.location == "Notes.md", Attachment.data['noteType'] == "4"
         ).first()
-        if c:
-            return c[0]
+
+    def get_md_notes(self, session):
+        att = self.get_md_notes_att(session)
+        if att:
+            return att.text_content
 
     def get_neighbour_data(
             self, session, parents=True, children=True, siblings=True,
@@ -370,45 +376,52 @@ class Attachment(Base):
             i = cls.create_from_json(data, content)
         return i
 
-    @ staticmethod
-    def maybe_text(data, content):
+    def set_text_content(self, text_content):
+        if text_content[0] == '\ufeff':
+            text_content = text_content[1:]
+        self.text_content = text_content
+        if self.att_type == AttachmentType.NotesV9:
+            text_content = cleaner.clean(text_content)
+        try:
+            langs = detect_langs(text_content)
+            self.inferred_locale = langs[0].lang if langs else "zxx"
+        except Exception:
+            self.inferred_locale = "zxx"
+        self.content = None
+
+    def set_content(self, content):
         att_type=AttachmentType._value2member_map_[data['type']]
         text_content = None
         inferred_locale = None
-        if att_type == AttachmentType.NotesV9 or (
-                att_type == AttachmentType.InternalFile and
-                data.get("noteType", 0) == 4):
-            text_content = content.decode('utf-8')
-            if text_content[0] == u'\ufeff':
-                text_content = text_content[1:]
-            content = None
-            stripped_text = cleaner.clean(text_content
-                ) if att_type == AttachmentType.NotesV9 else text_content
-            langs = detect_langs(stripped_text)
-            inferred_locale = langs[0].lang if langs else "zxx"
-        return (content, text_content, inferred_locale)
+        if self.att_type == AttachmentType.NotesV9 or (
+                self.att_type == AttachmentType.InternalFile and
+                self.data.get("noteType", 0) == 4):
+            self.set_text_content(content.decode('utf-8'))
+        else:
+            self.content = content
+            self.text_content = None
+            self.inferred_locale = None
 
     @ classmethod
     def create_from_json(cls, data, content=None):
-        content, text_content, inferred_locale = cls.maybe_text(data, content)
-        return cls(
+        att = cls(
             id=data['id'],
             brain_id=data['brainId'],
             data=data,
-            content=content,
-            text_content=text_content,
-            inferred_locale=inferred_locale,
             last_modified=parse_datetime(data['modificationDateTime']),
             location=data['location'],
             att_type=AttachmentType._value2member_map_[data['type']],
             node_id=data['sourceId']
         )
+        if content:
+            att.set_content(content)
+        return att
 
     def update_from_json(self, data, content=None, force=False):
         assert data['id'] == self.id
         data_time = parse_datetime(data['modificationDateTime'])
-        # if data_time <= self.last_modified and not force:
-        #     return
+        if data_time <= self.last_modified and not force:
+            return
         self.brain_id = data['brainId']
         self.data = data
         self.last_modified = data_time
@@ -416,8 +429,7 @@ class Attachment(Base):
         self.node_id = data['sourceId']
         self.att_type = AttachmentType._value2member_map_[data['type']]
         if content:
-            (self.content, self.text_content, self.inferred_locale
-            ) = self.maybe_text(data, content)
+            att.set_content(content)
 
     def brain_uri(self):
         return f"https://api.thebrain.com/api-v11/brains/{self.brain_id}/thoughts/{self.node_id}/md-images/{self.location}"
