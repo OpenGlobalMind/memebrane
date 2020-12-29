@@ -1,6 +1,7 @@
 from datetime import datetime
 import enum
 from logging import info
+from re import A
 
 from isodate import parse_datetime
 from sqlalchemy import (
@@ -130,6 +131,21 @@ class Node(Base):
     brain = relationship(Brain, foreign_keys=[brain_id])
     # siblings = relationship("Node", secondary="Link")
 
+    def get_html_notes(self, session):
+        c = session.query(Attachment.text_content).filter_by(
+            node=self, att_type=AttachmentType.NotesV9
+        ).first()
+        if c:
+            return c[0]
+
+    def get_md_notes(self, session):
+        c = session.query(Attachment.text_content).filter(
+            Attachment.node == self, Attachment.att_type == AttachmentType.InternalFile,
+            Attachment.location == "Notes.md", Attachment.data['noteType'] == "4"
+        ).first()
+        if c:
+            return c[0]
+
     def get_neighbour_data(
             self, session, parents=True, children=True, siblings=True,
             jumps=True, tags=True, of_tags=True, full=False, with_links=False):
@@ -201,7 +217,7 @@ class Node(Base):
             read_as_focus=focus,
             is_type=bool(data['kind'] & NodeType.Type.value),
             is_tag=bool(data['kind'] & NodeType.Tag.value),
-            private=data['aCType'],
+            private=data.get('ACType', 0),
             tags=tags
         )
 
@@ -235,7 +251,7 @@ class Node(Base):
         self.last_modified = data_time
         self.is_type = bool(data['kind'] & NodeType.Type.value)
         self.is_tag = bool(data['kind'] & NodeType.Tag.value)
-        self.private = data['aCType']
+        self.private = data.get('ACType', 0)
 
 
 class Link(Base):

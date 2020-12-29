@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import requests
 
-from .models import Node, Brain, Link, Attachment
+from .models import AttachmentType, Node, Brain, Link, Attachment
 
 CONFIG_BRAINS = None
 BRAINS = {}
@@ -135,17 +135,13 @@ def add_to_cache(session, data, force=False):
     for node in nodes_in_cache:
         node_data = nodes.pop(node.id)
         focus = node.id == root_id
-        if focus:
-            for t in ['tags', 'notesHtml', 'notesMarkdown']:
-                if t in data:
-                    node_data[t] = data[t]
+        if focus and 'tags' in data:
+            node_data['tags'] = data.get('tags', [])
         node.update_from_json(node_data, focus, force)
     for node_data in nodes.values():
         focus = node_data['id'] == root_id
         if focus:
-            for t in ['tags', 'notesHtml', 'notesMarkdown']:
-                if t in data:
-                    node_data[t] = data[t]
+            node_data['tags'] = data.get('tags', [])
         session.add(Node.create_from_json(
             node_data, node_data['id'] == root_id))
     session.flush()
@@ -161,11 +157,21 @@ def add_to_cache(session, data, force=False):
     attachments = {l['id']: l for l in data.get("attachments", ())}
     attachments_in_cache = session.query(Attachment).filter(
         Attachment.id.in_(attachments.keys()))
+    def get_content(adata, data):
+        content = None
+        atype = adata.get("type", 0)
+        if atype == AttachmentType.NotesV9.value:
+            # TODO: uniformize URLs
+            return data["notesHtml"].encode('utf-8')
+        elif atype == AttachmentType.InternalFile.value and adata.get("noteType", 0) == 4:
+            return data["notesText"].encode('utf-8')
+
     for attachment in attachments_in_cache:
+        adata = attachments.pop(attachment.id)
         attachment.update_from_json(
-            attachments.pop(attachment.id), force=force)
+            adata, get_content(adata, data), force=force)
     for adata in attachments.values():
-        session.add(Attachment.create_from_json(adata))
+        session.add(Attachment.create_from_json(adata, get_content(adata, data)))
     session.commit()
 
 
@@ -188,7 +194,9 @@ def create_tables(engine):
 
 
 def lcase1(str):
-    return str[0].lower() + str[1:]
+    if str[1].lower() == str[1]:
+        return str[0].lower() + str[1:]
+    return str
 
 
 def lcase_json(json):

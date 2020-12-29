@@ -24,14 +24,6 @@ def read_brain(base: Path, session):
         for line in f:
             node = json.loads(line)
             node_base = base.joinpath(node["Id"])
-            attf = node_base.joinpath("Notes.md")
-            if attf.exists():
-                with attf.open() as f2:
-                    node["notesMarkdown"] = f2.read()
-            attf = node_base.joinpath("Notes", "notes.html")
-            if attf.exists():
-                with attf.open() as f2:
-                    node["notesHtml"] = f2.read()
             node = Node.create_or_update_from_json(session, lcase_json(node))
             session.add(node)
     with open(base.joinpath("links.json")) as f:

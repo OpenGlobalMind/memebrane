@@ -189,6 +189,9 @@ def get_thought_route(brain_slug, thought_id):
     if not node:
         return Response("No such thought", status=404)
 
+    if node.private:
+        return Response("Private thought", status=403)
+
     # get show args
     show = request.args.get('show', '')
     show_query_string = f"?show={show}" if show else ''
@@ -211,11 +214,12 @@ def get_thought_route(brain_slug, thought_id):
     for d in linkst.values():
         names.update(d)
 
-    notes_html = node.data.get('notesHtml', "")
-    notes_html = re.sub(
-        LINK_RE,
-        lambda match: convert_link(match, brain, show_query_string),
-        notes_html)
+    notes_html = node.get_html_notes(db.session)
+    if notes_html:
+        notes_html = re.sub(
+            LINK_RE,
+            lambda match: convert_link(match, brain, show_query_string),
+            notes_html)
     # render page
     return render_template(
         'index.html',
@@ -235,7 +239,7 @@ def get_thought_route(brain_slug, thought_id):
         names=names,
         attachments=node.attachments,
         notes_html=notes_html,
-        notes_markdown=node.data.get('notesMarkdown', ""),
+        notes_markdown=node.get_md_notes(db.session),
     )
 
 
