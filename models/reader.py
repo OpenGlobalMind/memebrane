@@ -8,6 +8,7 @@ from .utils import get_brain, get_session, lcase_json, engine_from_config, get_s
 
 
 def read_brain(base: Path, session):
+    node_ids = set()
     with open(base.joinpath("meta.json")) as f:
         meta = json.load(f)
         brain_id = meta["BrainId"]
@@ -15,20 +16,25 @@ def read_brain(base: Path, session):
     with open(base.joinpath("thoughts.json")) as f:
         for line in f:
             node = json.loads(line)
+            node_ids.add(node["Id"])
             node_base = base.joinpath(node["Id"])
             node = Node.create_or_update_from_json(session, lcase_json(node))
             session.add(node)
     with open(base.joinpath("links.json")) as f:
         for line in f:
             link = json.loads(line)
-            if link['ThoughtIdA'] == '00000000-0000-0000-0000-000000000000' or \
-                    link['ThoughtIdB'] == '00000000-0000-0000-0000-000000000000':
+            if link['ThoughtIdA'] not in node_ids or \
+                    link['ThoughtIdB'] not in node_ids:
+                print("Missing link: ", link["Id"], link["ThoughtIdA"], link["ThoughtIdB"])
                 continue
             link = Link.create_or_update_from_json(session, lcase_json(link))
             session.add(link)
     with open(base.joinpath("attachments.json")) as f:
         for line in f:
             att = json.loads(line)
+            if att["SourceId"] not in node_ids:
+                print("Missing attachment: ", att["Id"], att["SourceId"])
+                continue
             content = None
             if att['Type'] not in (
                     AttachmentType.ExternalFile.value,
