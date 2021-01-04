@@ -10,7 +10,9 @@ from sqlalchemy.orm import undefer
 from sqlalchemy.sql import func
 
 from models.models import Node, Brain, Link, Attachment
-from models.utils import get_brain, get_node, add_brain, convert_link, LINK_RE
+from models.utils import (
+    get_brain, get_node, add_brain, convert_link, LINK_RE, process_markdown,
+    )
 
 postgres_language_configurations = {
     'da': 'danish',
@@ -220,6 +222,13 @@ def get_thought_route(brain_slug, thought_id):
             LINK_RE,
             lambda match: convert_link(match, brain, show_query_string),
             notes_html)
+    else:
+        notes_markdown=node.get_md_notes(db.session)
+        if notes_markdown:
+            notes_html = process_markdown(notes_markdown)
+    if notes_html:
+        notes_html = resolve_html_links(notes_html)
+
     # render page
     return render_template(
         'index.html',
@@ -239,15 +248,16 @@ def get_thought_route(brain_slug, thought_id):
         names=names,
         attachments=node.attachments,
         notes_html=notes_html,
-        notes_markdown=node.get_md_notes(db.session),
     )
 
 
-@app.route("/brain/<brain_slug>/thought/<thought_id>/md-images/<location>")
+@app.route("/brain/<brain_slug>/thought/<thought_id>/.data/md-images/<location>")
 def get_image_content(brain_slug, thought_id, location):
     brain = get_brain(db.session, brain_slug)
     if not brain:
         return Response("No such brain", status=404)
+    # TODO: use node ID implicit in location?
+    # Honour the $width=100p$ parameter
     att = db.session.query(Attachment).filter_by(
         brain=brain,
         node_id=thought_id,
@@ -257,6 +267,10 @@ def get_image_content(brain_slug, thought_id, location):
         node, data = get_node(db.session, brain, thought_id)
         if not node:
             return Response("No such node", status=404)
+
+        if node.private:
+            return Response("Private thought", status=403)
+
         atts = [a for a in node.attachments if a.location == location]
         if not atts:
             return Response("No such image", status=404)

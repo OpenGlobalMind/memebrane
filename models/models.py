@@ -32,6 +32,7 @@ if True:
 else:
     UUID = String
     JSONB = Text
+from . import BRAIN_API
 
 
 cleaner = Cleaner(tags=[], strip=True, strip_comments=True)
@@ -435,7 +436,7 @@ class Attachment(Base):
             att.set_content(content)
 
     def brain_uri(self):
-        return f"https://api.thebrain.com/api-v11/brains/{self.brain_id}/thoughts/{self.node_id}/md-images/{self.location}"
+        return f"https://api.thebrain.com/{BRAIN_API}/brains/{self.brain_id}/thoughts/{self.node_id}/md-images/{self.location}"
 
     def populate_content(self, force=False):
         if self.content and not force:

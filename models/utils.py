@@ -9,7 +9,9 @@ import uuid
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import requests
+from markdown import markdown
 
+from . import BRAIN_API
 from .models import AttachmentType, Node, Brain, Link, Attachment
 
 CONFIG_BRAINS = None
@@ -18,8 +20,8 @@ BRAINS = {}
 
 def get_thought_data(brain_id, thought_id):
     print(thought_id)
-    r = requests.get('https://api.thebrain.com/api-v11/brains/' +
-                     brain_id + '/thoughts/' + thought_id + '/graph')
+    r = requests.get(
+        f"https://api.thebrain.com/{BRAIN_API}/brains/{brain_id}/thoughts/{thought_id}/graph")
     try:
         return r.json()
     except Exception as e:
@@ -34,10 +36,14 @@ def get_config_brains():
     return CONFIG_BRAINS
 
 
+UUID_S = \
+    r'[0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12}'
 LINK_RE = re.compile(
-    r'\bbrain://(?:api\.thebrain\.com/(?P<brain>[-_A-Za-z0-9]{22})/)?(?P<node>[-_A-Za-z0-9]{22})/(?P<suffix>\w+)\b')
-UUID_RE = re.compile(
-    r'^[0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12}$', re.I)
+    rf'\bbrain://(?:api\.thebrain\.com/(?P<brain>{UUID_S})/)?(?P<node>{UUID_S})/(?P<suffix>\w+)\b')
+UUID_RE = re.compile(rf'^{UUID_S}$', re.I)
+BRAIN_BASE1_S = re.compile(r"<!--BrainNotesBase-->")
+BRAIN_BASE2_S = re.compile(r".data/md-images")
+BRAIN_BASE1_RE = re.compile(BRAIN_BASE1_S)
 
 
 def _b642uuid(b):
@@ -126,12 +132,13 @@ def populate_brains(session, brains):
         session.add(brain)
 
 
-def add_to_cache(session, data, force=False):
+def add_to_cache(session, brain_id, data, force=False):
     root_id = data['root']['id']
     nodes = {t['id']: t for t in data["thoughts"]}
     nodes.update({t['id']: t for t in data["tags"]})
     node_ids = set(nodes.keys())
-    nodes_in_cache = session.query(Node).filter(Node.id.in_(nodes.keys()))
+    nodes_in_cache = session.query(Node).filter(
+        Node.id.in_(nodes.keys()), Node.brain_id==brain_id)
     for node in nodes_in_cache:
         node_data = nodes.pop(node.id)
         focus = node.id == root_id
@@ -146,7 +153,8 @@ def add_to_cache(session, data, force=False):
             node_data, node_data['id'] == root_id))
     session.flush()
     links = {l['id']: l for l in data.get("links", ())}
-    links_in_cache = session.query(Link).filter(Link.id.in_(links.keys()))
+    links_in_cache = session.query(Link).filter(
+        Link.id.in_(links.keys()), Link.brain_id==brain_id)
     for link in links_in_cache:
         link.update_from_json(links.pop(link.id), force)
     for ldata in links.values():
@@ -161,10 +169,12 @@ def add_to_cache(session, data, force=False):
         content = None
         atype = adata.get("type", 0)
         if atype == AttachmentType.NotesV9.value:
-            # TODO: uniformize URLs
-            return data["notesHtml"].encode('utf-8')
+            return convert_api_links(data["notesHtml"].encode('utf-8'), root_id, brain_id)
         elif atype == AttachmentType.InternalFile.value and adata.get("noteType", 0) == 4:
-            return data["notesText"].encode('utf-8')
+            return convert_api_links(data["notesText"].encode('utf-8'), root_id, brain_id)
+        else:
+            # TODO: Should I get the attachment content from the link?
+            pass
 
     for attachment in attachments_in_cache:
         adata = attachments.pop(attachment.id)
@@ -181,7 +191,7 @@ def get_node(session, brain, id, cache_staleness=timedelta(days=1), force=False)
     if force or not node or cache_staleness is None or not node.read_as_focus or datetime.now() - node.last_read > cache_staleness:
         data = get_thought_data(brain.id, id)
         if data:
-            add_to_cache(session, data, force)
+            add_to_cache(session, brain_id, data, force)
             if not node:
                 node = session.query(Node).filter_by(
                     id=id, brain_id=brain.id).first()
@@ -204,6 +214,19 @@ def lcase_json(json):
         lcase1(key): lcase_json(val) if isinstance(val, dict) else val
         for key, val in json.items()
     }
+
+
+def convert_api_links(text, node_id, brain_id):
+    image_re = re.compile(
+        rf'https://api.thebrain.com/{BRAIN_API}/brains/{brain_id}/thoughts/{node_gid}/md-images/({UUID_S}\.\w+)')
+    return image_re.sub(r".data/md-images/\1", text)
+
+def resolve_html_links(html):
+    return BRAIN_BASE1_RE.sub(BRAIN_BASE2_S, html)
+
+def process_markdown(md):
+    md = BRAIN_BASE1_RE.sub(BRAIN_BASE2_S, md)
+    return markdown(md)
 
 
 if __name__ == '__main__':
