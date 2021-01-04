@@ -169,9 +169,9 @@ def add_to_cache(session, brain_id, data, force=False):
         content = None
         atype = adata.get("type", 0)
         if atype == AttachmentType.NotesV9.value:
-            return convert_api_links(data["notesHtml"].encode('utf-8'), root_id, brain_id)
+            return convert_api_links(data["notesHtml"], root_id, brain_id)
         elif atype == AttachmentType.InternalFile.value and adata.get("noteType", 0) == 4:
-            return convert_api_links(data["notesText"].encode('utf-8'), root_id, brain_id)
+            return convert_api_links(data["notesText"], root_id, brain_id)
         else:
             # TODO: Should I get the attachment content from the link?
             pass
@@ -218,7 +218,7 @@ def lcase_json(json):
 
 def convert_api_links(text, node_id, brain_id):
     image_re = re.compile(
-        rf'https://api.thebrain.com/{BRAIN_API}/brains/{brain_id}/thoughts/{node_gid}/md-images/({UUID_S}\.\w+)')
+        rf'https://api.thebrain.com/{BRAIN_API}/brains/{brain_id}/thoughts/{node_id}/md-images/({UUID_S}\.\w+)')
     return image_re.sub(r".data/md-images/\1", text)
 
 def resolve_html_links(html):
