@@ -41,8 +41,8 @@ UUID_S = \
 LINK_RE = re.compile(
     rf'\bbrain://(?:api\.thebrain\.com/(?P<brain>{UUID_S})/)?(?P<node>{UUID_S})/(?P<suffix>\w+)\b')
 UUID_RE = re.compile(rf'^{UUID_S}$', re.I)
-BRAIN_BASE1_S = re.compile(r"<!--BrainNotesBase-->")
-BRAIN_BASE2_S = re.compile(r".data/md-images")
+BRAIN_BASE1_S = r"<!--BrainNotesBase-->"
+BRAIN_BASE2_S = r".data/md-images"
 BRAIN_BASE1_RE = re.compile(BRAIN_BASE1_S)
 
 
@@ -60,9 +60,9 @@ def extract_link(link_match):
 def convert_link(link_match, brain, query_string=''):
     node_id, brain_id = extract_link(link_match)
     if brain_id:
-        return f"/brain/{brain_id}/thought/{node_id}{query_string}"
+        return f"/brain/{brain_id}/thought/{node_id}/{query_string}"
     else:
-        return f"/brain/{brain.safe_slug}/thought/{node_id}{query_string}"
+        return f"/brain/{brain.safe_slug}/thought/{node_id}/{query_string}"
 
 
 def get_brain(session, slug):
@@ -171,7 +171,7 @@ def add_to_cache(session, brain_id, data, force=False):
         if atype == AttachmentType.NotesV9.value:
             return convert_api_links(data["notesHtml"], root_id, brain_id)
         elif atype == AttachmentType.InternalFile.value and adata.get("noteType", 0) == 4:
-            return convert_api_links(data["notesText"], root_id, brain_id)
+            return convert_api_links(data["notesMarkdown"], root_id, brain_id)
         else:
             # TODO: Should I get the attachment content from the link?
             pass

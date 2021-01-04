@@ -12,7 +12,7 @@ from sqlalchemy.sql import func
 from models.models import Node, Brain, Link, Attachment
 from models.utils import (
     get_brain, get_node, add_brain, convert_link, LINK_RE, process_markdown,
-    )
+    resolve_html_links)
 
 postgres_language_configurations = {
     'da': 'danish',
@@ -168,7 +168,7 @@ def recompose_data(node):
         status=1, tags=[tag.data for tag in tags], notesHtml="", notesMarkdown="")
 
 
-@app.route("/brain/<brain_slug>/thought/<thought_id>")
+@app.route("/brain/<brain_slug>/thought/<thought_id>/")
 def get_thought_route(brain_slug, thought_id):
     brain = get_brain(db.session, brain_slug)
     if not brain:
@@ -185,7 +185,7 @@ def get_thought_route(brain_slug, thought_id):
         # prefer the short form
         query_string = ('?' + request.query_string.decode('ascii')
                         ) if request.query_string else ''
-        return redirect(f'/brain/{brain.slug}/thought/{thought_id}{query_string}', code=302)
+        return redirect(f'/brain/{brain.slug}/thought/{thought_id}/{query_string}', code=302)
 
     node, data = get_node(db.session, brain, thought_id, force=force)
     if not node:
@@ -217,16 +217,15 @@ def get_thought_route(brain_slug, thought_id):
         names.update(d)
 
     notes_html = node.get_html_notes(db.session)
+    if not notes_html:
+        notes_markdown=node.get_md_notes(db.session)
+        if notes_markdown:
+            notes_html = process_markdown(notes_markdown)
     if notes_html:
         notes_html = re.sub(
             LINK_RE,
             lambda match: convert_link(match, brain, show_query_string),
             notes_html)
-    else:
-        notes_markdown=node.get_md_notes(db.session)
-        if notes_markdown:
-            notes_html = process_markdown(notes_markdown)
-    if notes_html:
         notes_html = resolve_html_links(notes_html)
 
     # render page

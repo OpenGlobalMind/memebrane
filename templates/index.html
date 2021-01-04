@@ -18,7 +18,7 @@
 	Parents:
 	{% for id, name in parents.items() %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
+	<a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}/{{ show_query_string }}">{{ name }}</a>
 	{% endfor %}
       </p>
 {% endif %}
@@ -30,7 +30,7 @@
 	  Siblings:
 	  {% for id, name in siblings.items() %}
 	  {% if loop.index > 1 %} - {% endif %}
-	  <a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
+	  <a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}/{{ show_query_string }}">{{ name }}</a>
 	  {% endfor %}
 	</p>
       {% endif %}
@@ -39,7 +39,7 @@
 	Children:
 	{% for id, name in children.items() %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
+	<a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}/{{ show_query_string }}">{{ name }}</a>
 	{% endfor %}
       </p>
   {% endif %}
@@ -48,7 +48,7 @@
 	Jumps:
 	{% for id, name in jumps.items() %}
 	{% if loop.index > 1 %} - {% endif %}
-	<a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
+	<a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}/{{ show_query_string }}">{{ name }}</a>
 	{% endfor %}
       </p>
   {% endif %}
@@ -57,7 +57,7 @@
   Tags:
   {% for id, name in tags.items() %}
   {% if loop.index > 1 %} - {% endif %}
-  <a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
+  <a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}/{{ show_query_string }}">{{ name }}</a>
   {% endfor %}
       </p>
   {% endif %}
@@ -66,7 +66,7 @@
         With tag:
       {% for id, name in of_tag.items() %}
       {% if loop.index > 1 %} - {% endif %}
-      <a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}{{ show_query_string }}">{{ name }}</a>
+      <a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}/{{ show_query_string }}">{{ name }}</a>
       {% endfor %}
       </p>
   {% endif %}

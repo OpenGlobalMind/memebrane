@@ -400,7 +400,9 @@ class Attachment(Base):
         if self.att_type == AttachmentType.NotesV9 or (
                 self.att_type == AttachmentType.InternalFile and
                 self.data.get("noteType", 0) == 4):
-            self.set_text_content(content.decode('utf-8'))
+            if isinstance(content, bytes):
+                content = content.decode('utf-8')
+            self.set_text_content(content)
         else:
             self.content = content
             self.text_content = None
@@ -433,7 +435,7 @@ class Attachment(Base):
         self.node_id = data['sourceId']
         self.att_type = AttachmentType._value2member_map_[data['type']]
         if content:
-            att.set_content(content)
+            self.set_content(content)
 
     def brain_uri(self):
         return f"https://api.thebrain.com/{BRAIN_API}/brains/{self.brain_id}/thoughts/{self.node_id}/md-images/{self.location}"
