@@ -10,6 +10,7 @@ isodate==0.6.0
 itsdangerous==1.1.0
 Jinja2==2.11.2
 MarkupSafe==1.1.1
+Markdown==3.3.3
 psycopg2-binary==2.8.6
 requests==2.25.0
 simplejson==3.17.2

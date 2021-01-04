@@ -191,7 +191,7 @@ def get_node(session, brain, id, cache_staleness=timedelta(days=1), force=False)
     if force or not node or cache_staleness is None or not node.read_as_focus or datetime.now() - node.last_read > cache_staleness:
         data = get_thought_data(brain.id, id)
         if data:
-            add_to_cache(session, brain_id, data, force)
+            add_to_cache(session, brain.id, data, force)
             if not node:
                 node = session.query(Node).filter_by(
                     id=id, brain_id=brain.id).first()
