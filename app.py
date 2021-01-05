@@ -192,6 +192,7 @@ def get_thought_route(brain_slug, thought_id):
         return Response("No such thought", status=404)
 
     if node.private:
+        # TODO: Give the brain link
         return Response("Private thought", status=403)
 
     # get show args
@@ -261,7 +262,10 @@ def get_image_content(brain_slug, thought_id, location):
         brain=brain,
         node_id=thought_id,
         location=location
-    ).options(undefer(Attachment.content)).one()
+    ).options(undefer(Attachment.content)).first()
+    # TODO: handle duplicate notes.html.
+    # May differ in noteType, but no clear interpretation.
+
     if not att:
         node, data = get_node(db.session, brain, thought_id)
         if not node:
@@ -277,5 +281,5 @@ def get_image_content(brain_slug, thought_id, location):
     att.populate_content()
     if not att.content:
         # maybe a permission issue? redirect to brain
-        return Response(location=att.brain_uri(), status=303)
+        return Response(headers={"location":att.brain_uri()}, status=303)
     return Response(att.content, mimetype=guess_type(location)[0])

@@ -180,6 +180,7 @@ def add_to_cache(session, brain_id, data, force=False):
         adata = attachments.pop(attachment.id)
         attachment.update_from_json(
             adata, get_content(adata, data), force=force)
+    # TODO: Should I delete absent attachments?
     for adata in attachments.values():
         session.add(Attachment.create_from_json(adata, get_content(adata, data)))
     session.commit()
