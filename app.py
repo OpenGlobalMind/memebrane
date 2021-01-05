@@ -279,7 +279,8 @@ def get_image_content(brain_slug, thought_id, location):
             return Response("No such image", status=404)
         att = atts[0]
     att.populate_content()
-    if not att.content:
+    content = att.text_content or att.content
+    if not content:
         # maybe a permission issue? redirect to brain
         return Response(headers={"location":att.brain_uri()}, status=303)
-    return Response(att.content, mimetype=guess_type(location)[0])
+    return Response(content, mimetype=guess_type(location)[0])

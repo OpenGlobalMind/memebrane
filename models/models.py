@@ -134,7 +134,7 @@ class Node(Base):
 
     def get_html_notes_att(self, session):
         return session.query(Attachment).filter(
-            AttachmentType.node==self, AttachmentType.att_type==AttachmentType.NotesV9,
+            Attachment.node==self, Attachment.att_type==AttachmentType.NotesV9,
             Attachment.text_content != None
         ).first()
 
@@ -382,6 +382,12 @@ class Attachment(Base):
             i = cls.create_from_json(data, content)
         return i
 
+    @ property
+    def location_adjusted(self):
+        if "/" not in self.location:
+            return ".data/md-images/" + self.location
+        return self.location
+
     def set_text_content(self, text_content):
         if text_content[0] == '\ufeff':
             text_content = text_content[1:]
@@ -442,13 +448,15 @@ class Attachment(Base):
         return f"https://api.thebrain.com/{BRAIN_API}/brains/{self.brain_id}/thoughts/{self.node_id}/md-images/{self.location}"
 
     def populate_content(self, force=False):
-        if self.content and not force:
+        if self.att_type in (
+                AttachmentType.ExternalFile, AttachmentType.ExternalUrl,
+                AttachmentType.ExternalDirectory):
             return
-        if self.data["type"] in (1, 3, 4):  # links and notes
+        if (self.text_content or self.content) and not force:
             return
         contentr = requests.get(self.brain_uri())
         if contentr.ok:
-            self.content = contentr.content
+            self.set_content(contentr.content)
 
     @ property
     def name(self):
