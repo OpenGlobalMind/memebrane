@@ -283,4 +283,5 @@ def get_image_content(brain_slug, thought_id, location):
     if not content:
         # maybe a permission issue? redirect to brain
         return Response(headers={"location":att.brain_uri()}, status=303)
-    return Response(content, mimetype=guess_type(location)[0])
+    # TODO: Use /etc/nginx/mime.types, which is fuller, but strip semicolons
+    return Response(content, mimetype=guess_type(location, False)[0])
