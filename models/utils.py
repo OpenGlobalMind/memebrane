@@ -38,8 +38,9 @@ def get_config_brains():
 
 UUID_S = \
     r'[0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12}'
+UUID_B64 = r'[-_A-Za-z0-9]{22}'
 LINK_RE = re.compile(
-    rf'\bbrain://(?:api\.thebrain\.com/(?P<brain>{UUID_S})/)?(?P<node>{UUID_S})/(?P<suffix>\w+)\b')
+    rf'\bbrain://(?:api\.thebrain\.com/(?P<brain>{UUID_B64})/)?(?P<node>{UUID_B64})/(?P<suffix>\w+)\b')
 UUID_RE = re.compile(rf'^{UUID_S}$', re.I)
 BRAIN_BASE1_S = r"<!--BrainNotesBase-->"
 BRAIN_BASE2_S = r".data/md-images"

@@ -133,8 +133,9 @@ class Node(Base):
     # siblings = relationship("Node", secondary="Link")
 
     def get_html_notes_att(self, session):
-        return session.query(Attachment).filter_by(
-            node=self, att_type=AttachmentType.NotesV9
+        return session.query(Attachment).filter(
+            AttachmentType.node==self, AttachmentType.att_type==AttachmentType.NotesV9,
+            Attachment.text_content != None
         ).first()
 
     def get_html_notes(self, session):
