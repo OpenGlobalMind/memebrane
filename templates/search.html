@@ -1,0 +1,24 @@
+<html>
+  <head>
+    <title>MemeBrane: {{ brain_name }}</title>
+  </head>
+  <body>
+    <h1>Search {{brain_name }}</h1>
+    <form method="GET">
+      <label for="query">Keywords:</label>
+      <input type="text" id="query" name="query" />
+      <br/>
+      {% if langs %}
+      <label for="lang">Language</label>
+      <select id="lang">
+        <option value="simple">simple</option>
+        {% for lang, lname in langs.items() %}
+        <option value="{{lang}}">{{lname}}</option>
+        {% endfor %}
+      </select>
+      <br/>
+      {% endif %}
+      <input type="checkbox" name="notes" id="notes" checked/><label for="notes">Include notes in search</label>
+    </form>
+  </body>
+</html>

@@ -17,6 +17,7 @@ from sqlalchemy import (
     literal,
     Enum,
 )
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import InterfaceError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
@@ -32,7 +33,7 @@ if True:
 else:
     UUID = String
     JSONB = Text
-from . import BRAIN_API
+from . import BRAIN_API, text_index_langs, postgres_language_configurations
 
 
 cleaner = Cleaner(tags=[], strip=True, strip_comments=True)
@@ -111,12 +112,17 @@ class Brain(Base):
 
 class Node(Base):
     __tablename__ = "node"
-    __table_args__ = (
+    __table_args__ = tuple([
+        Index("node_tags_idx", 'tags', postgresql_using='gin'),
         Index("node_name_vidx",
               func.to_tsvector('simple', 'node.name'),
               postgresql_using='gin'),
-        Index("node_tags_idx", 'tags', postgresql_using='gin'),
-    )
+    ] + [
+        Index(f"node_name_{lang}_vidx",
+              func.to_tsvector(postgres_language_configurations[lang], 'node.name'),
+              postgresql_using='gin')
+        for lang in text_index_langs
+    ])
     id = Column(UUID, primary_key=True)
     brain_id = Column(UUID, ForeignKey(
         Brain.id, ondelete="CASCADE"), nullable=False)
@@ -363,15 +369,17 @@ class Attachment(Base):
     inferred_locale = Column(String(3))
     node = relationship(Node, backref="attachments")
     brain = relationship(Brain, foreign_keys=[brain_id])
-    __table_args__ = (
+    __table_args__ = tuple([
         Index("attachment_text_idx",
               func.to_tsvector('simple', text_content),
-              postgresql_using='gin'),
-        Index("attachment_text_en_idx",
-              func.to_tsvector('english', text_content),
+              postgresql_using='gin')
+    ] + [
+        Index(f"attachment_text_{lang}_idx",
+              func.to_tsvector(postgres_language_configurations[lang], 'text_content'),
               postgresql_using='gin',
-              postgres_where=inferred_locale=='en')
-    )
+              postgresql_where=f"inferred_locale=='{lang}'")
+        for lang in text_index_langs
+    ])
 
     @ classmethod
     def create_or_update_from_json(cls, session, data, content=None, force=False):

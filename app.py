@@ -1,7 +1,6 @@
 import simplejson as json
 import re
 from mimetypes import guess_type
-from configparser import ConfigParser
 
 from flask import Flask, redirect, render_template, request, Response
 from flask_sqlalchemy import SQLAlchemy
@@ -9,34 +8,13 @@ import requests
 from sqlalchemy.orm import undefer
 from sqlalchemy.sql import func
 
+from models import mbconfig, text_index_langs, postgres_language_configurations
 from models.models import Node, Brain, Link, Attachment
 from models.utils import (
     get_brain, get_node, add_brain, convert_link, LINK_RE, process_markdown,
     resolve_html_links)
 
-postgres_language_configurations = {
-    'da': 'danish',
-    'nl': 'dutch',
-    'en': 'english',
-    'fi': 'finnish',
-    'fr': 'french',
-    'de': 'german',
-    'hu': 'hungarian',
-    'it': 'italian',
-    'no': 'norwegian',
-    'pt': 'portuguese',
-    'ro': 'romanian',
-    'ru': 'russian',
-    'es': 'spanish',
-    'sv': 'swedish',
-    'tr': 'turkish',
-    'simple': 'simple',
-}
 
-
-config = ConfigParser()
-config.read('config.ini')
-mbconfig = config['memebrane']
 
 app = Flask(__name__)
 app.config['FLASK_DEBUG'] = True
@@ -85,29 +63,47 @@ def search(brain_slug):
     limit = int(request.args.get('limit', 10))
     start = int(request.args.get('start', 0))
     if not terms:
-        return Response("Please add a ?query parameter", status=400)
-    filter = Node.name.match(terms)
-    query = db.session.query(Node.id, Node.name)
-    if request.args.get('notes', None):
-        query = query.join(Attachment)
-        lang = request.args.get('lang', None)
+        return render_template(
+            "search.html",
+            brain_name=brain.name,
+            langs = {lang: postgres_language_configurations[lang]
+                     for lang in text_index_langs}
+        )
+    lang = request.args.get('lang', None)
+    pglang = 'simple'
+    if lang in text_index_langs:
         pglang = postgres_language_configurations.get(lang, 'simple')
-        tfilter = Attachment.text_content.match(
-            func.websearch_to_tsquery(pglang, query))
+    matchargs = dict(postgresql_regconfig=pglang) if lang else {}
+    txtarg = func.to_tsvector(pglang, Node.name)
+    filter = txtarg.match(terms, **matchargs)
+    rank = [func.ts_rank_cd(txtarg, func.to_tsquery(pglang, terms))]
+    query = db.session.query(Node.id, Node.name).filter_by(brain=brain)
+    use_notes = request.args.get('notes', None)
+    if use_notes:
+        query = query.join(Attachment)
+        txtarg = func.to_tsvector(pglang, Attachment.text_content)
+        tfilter = txtarg.match(terms, **matchargs)
+        rank += [func.ts_rank_cd(txtarg, func.to_tsquery(pglang, terms))]
         if lang:
             filter = filter | (Attachment.inferred_locale == lang & tfilter)
         else:
             filter = filter | tfilter
-    nodes = db.session.query(Node.id, Node.name).filter(
-        (Node.brain == brain) & filter
-    ).offset(start).limit(limit).all()
+    nodes = query.filter(filter).order_by(*rank).offset(start).limit(limit).all()
     prev_link = next_link = None
     if len(nodes) == limit:
         next_start = start + limit
         next_link = f"/brain/{brain_slug}/search?start={next_start}&limit={limit}&query={terms}"
+        if use_notes:
+            next_link += "&notes=true"
+        if lang:
+            next_link += "&lang=" + lang
     if start > 0:
         prev_start = max(0, start - limit)
         prev_link = f"/brain/{brain_slug}/search?start={prev_start}&limit={limit}&query={terms}"
+        if use_notes:
+            prev_link += "&notes=true"
+        if lang:
+            prev_link += "&lang=" + lang
     return render_template(
         "search_results.html", nodes=nodes, brain=brain, query=terms,
         start=start+1, prev_link=prev_link, next_link=next_link)

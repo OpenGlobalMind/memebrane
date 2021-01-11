@@ -2,3 +2,4 @@
 # Change the password
 dburl=postgresql://memebrane:memebrane@localhost:5432/memebrane
 default_brain=jerry
+text_index_langs=en,fr
