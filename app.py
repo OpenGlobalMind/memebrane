@@ -76,14 +76,14 @@ def search(brain_slug):
     matchargs = dict(postgresql_regconfig=pglang) if lang else {}
     txtarg = func.to_tsvector(pglang, Node.name)
     filter = txtarg.match(terms, **matchargs)
-    rank = [func.ts_rank_cd(txtarg, func.to_tsquery(pglang, terms))]
+    rank = [func.ts_rank_cd(txtarg, func.to_tsquery(pglang, terms)).desc()]
     query = db.session.query(Node.id, Node.name).filter_by(brain=brain)
     use_notes = request.args.get('notes', None)
     if use_notes:
         query = query.join(Attachment)
         txtarg = func.to_tsvector(pglang, Attachment.text_content)
         tfilter = txtarg.match(terms, **matchargs)
-        rank += [func.ts_rank_cd(txtarg, func.to_tsquery(pglang, terms))]
+        rank += [func.ts_rank_cd(txtarg, func.to_tsquery(pglang, terms)).desc()]
         if lang:
             filter = filter | (Attachment.inferred_locale == lang & tfilter)
         else:
