@@ -77,7 +77,7 @@ def search(brain_slug):
     txtarg = func.to_tsvector(pglang, Node.name)
     filter = txtarg.match(terms, **matchargs)
     rank = [func.ts_rank_cd(txtarg, func.to_tsquery(pglang, terms)).desc()]
-    query = db.session.query(Node.id, Node.name).filter_by(brain=brain)
+    query = db.session.query(Node.id, Node.name).filter_by(brain=brain, private=False)
     use_notes = request.args.get('notes', None)
     if use_notes:
         query = query.join(Attachment)
