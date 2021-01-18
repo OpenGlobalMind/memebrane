@@ -1,26 +1,25 @@
-from pathlib import Path
 from sys import argv
 
 import simplejson as json
 
 from .models import Node, Link, Attachment, AttachmentType
-from .utils import get_brain, get_session, lcase_json, engine_from_config, get_session
+from .utils import get_brain, get_session, lcase_json, get_session
 
 
-def read_brain(base: Path, session):
+def read_brain(base, session):
     node_ids = set()
-    with open(base.joinpath("meta.json")) as f:
+    with base.joinpath("meta.json").open() as f:
         meta = json.load(f)
         brain_id = meta["BrainId"]
         brain = get_brain(session, brain_id)
-    with open(base.joinpath("thoughts.json")) as f:
+    with base.joinpath("thoughts.json").open() as f:
         for line in f:
             node = json.loads(line)
             node_ids.add(node["Id"])
             node_base = base.joinpath(node["Id"])
             node = Node.create_or_update_from_json(session, lcase_json(node))
             session.add(node)
-    with open(base.joinpath("links.json")) as f:
+    with base.joinpath("links.json").open() as f:
         for line in f:
             link = json.loads(line)
             if link['ThoughtIdA'] not in node_ids or \
@@ -29,7 +28,7 @@ def read_brain(base: Path, session):
                 continue
             link = Link.create_or_update_from_json(session, lcase_json(link))
             session.add(link)
-    with open(base.joinpath("attachments.json")) as f:
+    with base.joinpath("attachments.json").open() as f:
         for line in f:
             att = json.loads(line)
             if att["SourceId"] not in node_ids:
@@ -40,12 +39,12 @@ def read_brain(base: Path, session):
                     AttachmentType.ExternalFile.value,
                     AttachmentType.ExternalUrl.value,
                     AttachmentType.ExternalDirectory.value):
-                contentf = base.joinpath(att["SourceId"], att["Location"])
+                contentf = base.joinpath(att["SourceId"]).joinpath(att["Location"])
                 if contentf.exists():
                     with contentf.open(mode='rb') as f2:
                         content = f2.read()
                 else:
-                    contentf = base.joinpath(att["SourceId"], "Notes", att["Location"])
+                    contentf = base.joinpath(att["SourceId"]).joinpath("Notes").joinpath(att["Location"])
                     if contentf.exists():
                         with contentf.open(mode='rb') as f2:
                             content = f2.read()
@@ -56,6 +55,13 @@ def read_brain(base: Path, session):
 
 if __name__ == '__main__':
     fname = argv[1]
+    if fname.endswith('.brz'):
+        from zipfile import ZipFile, Path
+        root = Path(ZipFile(open(fname, 'rb')))
+    else:
+        from pathlib import Path
+        root = Path(fname)
+        assert root.is_dir()
     session = get_session()
-    read_brain(Path(fname), session)
+    read_brain(root, session)
     session.commit()
