@@ -1,5 +1,3 @@
-from sys import argv
-
 import simplejson as json
 
 from .models import Node, Link, Attachment, AttachmentType
@@ -53,10 +51,11 @@ def read_brain(base, session):
 
 
 if __name__ == '__main__':
+    from sys import argv
+    import zipfile
     fname = argv[1]
-    if fname.endswith('.brz'):
-        from zipfile import ZipFile, Path
-        root = Path(ZipFile(open(fname, 'rb')))
+    if zipfile.is_zipfile(fname):
+        root = zipfile.Path(zipfile.ZipFile(open(fname, 'rb')))
     else:
         from pathlib import Path
         root = Path(fname)
