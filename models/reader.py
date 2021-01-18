@@ -53,12 +53,11 @@ def read_brain(base, session):
 if __name__ == '__main__':
     from sys import argv
     import zipfile
-    fname = argv[1]
-    if zipfile.is_zipfile(fname):
-        root = zipfile.Path(zipfile.ZipFile(open(fname, 'rb')))
+    from pathlib import Path
+    root = Path(argv[1])
+    if zipfile.is_zipfile(root):
+        root = zipfile.Path(zipfile.ZipFile(root.open('rb')))
     else:
-        from pathlib import Path
-        root = Path(fname)
         assert root.is_dir()
     session = get_session()
     read_brain(root, session)
