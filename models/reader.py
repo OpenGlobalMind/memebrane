@@ -16,7 +16,6 @@ def read_brain(base, session):
         for line in f:
             node = json.loads(line)
             node_ids.add(node["Id"])
-            node_base = base.joinpath(node["Id"])
             node = Node.create_or_update_from_json(session, lcase_json(node))
             session.add(node)
     with base.joinpath("links.json").open() as f:
