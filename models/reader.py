@@ -6,17 +6,17 @@ from .utils import get_brain, get_session, lcase_json, get_session
 
 def read_brain(base, session):
     node_ids = set()
-    with base.joinpath("meta.json").open() as f:
+    with (base / "meta.json").open() as f:
         meta = json.load(f)
         brain_id = meta["BrainId"]
         brain = get_brain(session, brain_id)
-    with base.joinpath("thoughts.json").open() as f:
+    with (base / "thoughts.json").open() as f:
         for line in f:
             node = json.loads(line)
             node_ids.add(node["Id"])
             node = Node.create_or_update_from_json(session, lcase_json(node))
             session.add(node)
-    with base.joinpath("links.json").open() as f:
+    with (base / "links.json").open() as f:
         for line in f:
             link = json.loads(line)
             if link['ThoughtIdA'] not in node_ids or \
@@ -25,7 +25,7 @@ def read_brain(base, session):
                 continue
             link = Link.create_or_update_from_json(session, lcase_json(link))
             session.add(link)
-    with base.joinpath("attachments.json").open() as f:
+    with (base / "attachments.json").open() as f:
         for line in f:
             att = json.loads(line)
             if att["SourceId"] not in node_ids:
@@ -36,12 +36,12 @@ def read_brain(base, session):
                     AttachmentType.ExternalFile.value,
                     AttachmentType.ExternalUrl.value,
                     AttachmentType.ExternalDirectory.value):
-                contentf = base.joinpath(att["SourceId"]).joinpath(att["Location"])
+                contentf = base / att["SourceId"] / att["Location"]
                 if contentf.exists():
                     with contentf.open(mode='rb') as f2:
                         content = f2.read()
                 else:
-                    contentf = base.joinpath(att["SourceId"]).joinpath("Notes").joinpath(att["Location"])
+                    contentf = base / att["SourceId"] / "Notes" / att["Location"]
                     if contentf.exists():
                         with contentf.open(mode='rb') as f2:
                             content = f2.read()
