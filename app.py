@@ -196,11 +196,11 @@ def get_thought_route(brain_slug, thought_id):
         si = StringIO()
         cw = csv.writer(si)
         cw.writerow(["Name", "Node_UUID", "Node_Type", "Notes", "Link_Type", "Link_UUID"])
-        cw.writerow([node.name, node.id, node.type_name, node.get_notes_as_md(db.session), "self", ""])
+        cw.writerow([node.name, node.id, node.type_name, node.get_notes_as_md(), "self", ""])
         for rel, node2, link in node.get_neighbour_data(
-                db.session, full=True, with_links=True, with_attachments=True):
+                db.session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True):
             cw.writerow([node2.name, node2.id, node2.type_name,
-                node2.get_notes_as_md(db.session), rel, link.id if link else ""])
+                node2.get_notes_as_md(), rel, link.id if link else ""])
 
         output = make_response(si.getvalue())
         output.headers["Content-Disposition"] = "attachment; filename=export.csv"
@@ -229,7 +229,7 @@ def get_thought_route(brain_slug, thought_id):
     for d in linkst.values():
         names.update(d)
 
-    notes_html = node.get_notes_as_html(db.session)
+    notes_html = node.get_notes_as_html()
     if notes_html:
         notes_html = re.sub(
             LINK_RE,

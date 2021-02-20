@@ -65,6 +65,21 @@ def convert_link(link_match, brain, query_string=''):
     else:
         return f"/brain/{brain.safe_slug}/thought/{node_id}/{query_string}"
 
+def extract_text_links(text, brain_id):
+    acc = []
+    if text:
+        for m in LINK_RE.finditer(text):
+            n_id, b_id = extract_link(m)
+            if b_id is None or b_id == brain_id:
+                acc.append(str(n_id))
+    return acc
+
+
+def extract_text_links_from_data(data):
+    brain_id = data["brainId"]
+    return extract_text_links(data["notesHtml"], brain_id) \
+        or extract_text_links(data["notesMarkdown"], brain_id)
+
 
 def get_brain(session, slug):
     global CONFIG_BRAINS, BRAINS

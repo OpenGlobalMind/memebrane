@@ -114,6 +114,7 @@ class Node(Base):
     __tablename__ = "node"
     __table_args__ = tuple([
         Index("node_tags_idx", 'tags', postgresql_using='gin'),
+        Index("node_text_links_idx", 'text_links', postgresql_using='gin'),
         Index("node_name_vidx",
               func.to_tsvector('simple', 'node.name'),
               postgresql_using='gin'),
@@ -128,6 +129,7 @@ class Node(Base):
         Brain.id, ondelete="CASCADE"), nullable=False)
     data = Column(JSONB)
     tags = Column(ARRAY(UUID))
+    text_links = Column(ARRAY(UUID))
     name = Column(Unicode, nullable=False)
     last_read = Column(DateTime)
     last_modified = Column(DateTime)
@@ -138,38 +140,38 @@ class Node(Base):
     brain = relationship(Brain, foreign_keys=[brain_id])
     # siblings = relationship("Node", secondary="Link")
 
-    def get_html_notes(self, session):
+    def get_html_notes(self):
         atts = self.html_attachments
         if atts:
             return atts[0].text_content
 
-    def get_notes_as_md(self, session):
-        notes = self.get_md_notes(session)
+    def get_notes_as_md(self):
+        notes = self.get_md_notes()
         if notes:
             return notes
-        notes = self.get_html_notes(session)
+        notes = self.get_html_notes()
         if notes:
             from .utils import html_to_markdown
             return html_to_markdown(notes)
 
-    def get_notes_as_html(self, session):
-        notes = self.get_html_notes(session)
+    def get_notes_as_html(self):
+        notes = self.get_html_notes()
         if notes:
             return notes
-        notes = self.get_md_notes(session)
+        notes = self.get_md_notes()
         if notes:
             from .utils import process_markdown
             return process_markdown(notes)
 
-    def get_md_notes(self, session):
+    def get_md_notes(self):
         atts = self.md_attachments
         if atts:
             return atts[0].text_content
 
     def get_neighbour_data(
             self, session, parents=True, children=True, siblings=True,
-            jumps=True, tags=True, of_tags=True, full=False, with_links=False,
-            with_attachments=False):
+            jumps=True, tags=True, of_tags=True, full=False, text_links=False,
+            text_backlinks=False, with_links=False, with_attachments=False):
         queries = []
         entities = [Node] if full else [Node.id, Node.name]
         if with_links:
@@ -214,6 +216,20 @@ class Node(Base):
             if with_links:
                 query = query.outerjoin(Link, Link.id == None)
             queries.append(query)
+        if text_links:
+            query=session.query(
+                literal('text_link'), *entities).filter(
+                    Node.id.in_(self.text_links), Node.brain_id==self.brain.id)
+            if with_links:
+                query = query.outerjoin(Link, Link.id == None)
+            queries.append(query)
+        if text_backlinks:
+            query=session.query(
+                literal('text_backlink'), *entities).filter(
+                    Node.text_links.contains([self.id]), Node.brain_id==self.brain.id)
+            if with_links:
+                query = query.outerjoin(Link, Link.id == None)
+            queries.append(query)
         if not queries:
             return []
         query = queries.pop()
@@ -227,6 +243,7 @@ class Node(Base):
 
     @classmethod
     def create_from_json(cls, data, focus=False):
+        from .utils import extract_text_links_from_data
         data_time = parse_datetime(max(filter(None, [
             data['modificationDateTime'], data.get('linksModificationDateTime', None)])))
         tags = data.pop('tags', None)
@@ -240,6 +257,7 @@ class Node(Base):
             last_read=datetime.now(),
             last_modified=data_time,
             read_as_focus=focus,
+            text_links=extract_text_links_from_data(data) if focus else [],
             is_type=bool(data['kind'] & NodeType.Type.value),
             is_tag=bool(data['kind'] & NodeType.Tag.value),
             private=data.get('ACType', 0),
@@ -279,6 +297,9 @@ class Node(Base):
         if tags:
             tags = [t['id'] for t in tags]
             self.tags = tags
+        if focus:
+            from .utils import extract_text_links_from_data
+            self.text_links = extract_text_links_from_data(data)
         self.data.update(data)
         flag_modified(self, 'data')
         self.name = data['name']
