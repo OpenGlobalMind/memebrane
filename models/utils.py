@@ -77,8 +77,8 @@ def extract_text_links(text, brain_id):
 
 def extract_text_links_from_data(data):
     brain_id = data["brainId"]
-    return extract_text_links(data["notesHtml"], brain_id) \
-        or extract_text_links(data["notesMarkdown"], brain_id)
+    return extract_text_links(data.get("notesHtml", None), brain_id) \
+        or extract_text_links(data.get("notesMarkdown", None), brain_id)
 
 
 def get_brain(session, slug):
