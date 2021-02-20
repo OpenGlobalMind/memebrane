@@ -149,6 +149,24 @@ class Node(Base):
         if att:
             return att.text_content
 
+    def get_notes_as_md(self, session):
+        notes = self.get_md_notes(session)
+        if notes:
+            return notes
+        notes = self.get_html_notes(session)
+        if notes:
+            from .utils import html_to_markdown
+            return html_to_markdown(notes)
+
+    def get_notes_as_html(self, session):
+        notes = self.get_html_notes(session)
+        if notes:
+            return notes
+        notes = self.get_md_notes(session)
+        if notes:
+            from .utils import process_markdown
+            return process_markdown(notes)
+
     def get_md_notes_att(self, session):
         return session.query(Attachment).filter(
             Attachment.node == self, Attachment.att_type == AttachmentType.InternalFile,
@@ -234,6 +252,15 @@ class Node(Base):
             private=data.get('ACType', 0),
             tags=tags
         )
+
+    @ property
+    def type_name(self):
+        if self.is_type:
+            return NodeType.Type.name
+        elif self.is_tag:
+            return NodeType.Tag.name
+        else:
+            return NodeType.Normal.name
 
     @ classmethod
     def create_or_update_from_json(cls, session, data, force=False):

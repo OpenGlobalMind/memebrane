@@ -231,6 +231,14 @@ def process_markdown(md):
     return markdown(md)
 
 
+def html_to_markdown(html, flavour="markdown"):
+    try:
+        import pypandoc
+        return pypandoc.convert(html, flavour, "html")
+    except ImportError:
+        pass
+
+
 if __name__ == '__main__':
     engine = get_engine()
     create_tables(engine)

@@ -1,8 +1,10 @@
 import simplejson as json
 import re
 from mimetypes import guess_type
+from io import StringIO
+import csv
 
-from flask import Flask, redirect, render_template, request, Response
+from flask import Flask, redirect, render_template, request, Response, make_response
 from flask_sqlalchemy import SQLAlchemy
 import requests
 from sqlalchemy.orm import undefer
@@ -170,19 +172,13 @@ def get_thought_route(brain_slug, thought_id):
     if not brain:
         return Response("No such brain", status=404)
 
-    force = request.args.get('reload', False)
-    if request.accept_mimetypes.best == 'application/json':
-        node, data = get_node(db.session, brain, thought_id, force=force)
-        if data:
-            return data
-        return recompose_data(node)[1]
-
     if brain.slug and brain_slug == brain.id:
         # prefer the short form
         query_string = ('?' + request.query_string.decode('ascii')
                         ) if request.query_string else ''
         return redirect(f'/brain/{brain.slug}/thought/{thought_id}/{query_string}', code=302)
 
+    force = request.args.get('reload', False)
     node, data = get_node(db.session, brain, thought_id, force=force)
     if not node:
         return Response("No such thought", status=404)
@@ -190,6 +186,25 @@ def get_thought_route(brain_slug, thought_id):
     if node.private:
         # TODO: Give the brain link
         return Response("Private thought", status=403)
+
+    mimetype = request.args.get("mimetype", request.accept_mimetypes.best)
+    if mimetype == 'application/json':
+        if data:
+            return data
+        return recompose_data(node)[1]
+    elif mimetype == 'text/csv':
+        si = StringIO()
+        cw = csv.writer(si)
+        cw.writerow(["Name", "Node_UUID", "Node_Type", "Notes", "Link_Type", "Link_UUID"])
+        cw.writerow([node.name, node.id, node.type_name, node.get_notes_as_md(db.session), "self", ""])
+        for rel, node2, link in node.get_neighbour_data(
+                db.session, full=True, with_links=True):
+            cw.writerow([node2.name, node2.id, node2.type_name, node2.get_notes_as_md(db.session), rel, link.id])
+
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=export.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
 
     # get show args
     show = request.args.get('show', '')
@@ -213,11 +228,7 @@ def get_thought_route(brain_slug, thought_id):
     for d in linkst.values():
         names.update(d)
 
-    notes_html = node.get_html_notes(db.session)
-    if not notes_html:
-        notes_markdown=node.get_md_notes(db.session)
-        if notes_markdown:
-            notes_html = process_markdown(notes_markdown)
+    notes_html = node.get_notes_as_html(db.session)
     if notes_html:
         notes_html = re.sub(
             LINK_RE,
