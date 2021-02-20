@@ -216,7 +216,7 @@ class Node(Base):
             if with_links:
                 query = query.outerjoin(Link, Link.id == None)
             queries.append(query)
-        if text_links:
+        if text_links and self.text_links:
             query=session.query(
                 literal('text_link'), *entities).filter(
                     Node.id.in_(self.text_links), Node.brain_id==self.brain.id)
