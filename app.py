@@ -198,8 +198,9 @@ def get_thought_route(brain_slug, thought_id):
         cw.writerow(["Name", "Node_UUID", "Node_Type", "Notes", "Link_Type", "Link_UUID"])
         cw.writerow([node.name, node.id, node.type_name, node.get_notes_as_md(db.session), "self", ""])
         for rel, node2, link in node.get_neighbour_data(
-                db.session, full=True, with_links=True):
-            cw.writerow([node2.name, node2.id, node2.type_name, node2.get_notes_as_md(db.session), rel, link.id])
+                db.session, full=True, with_links=True, with_attachments=True):
+            cw.writerow([node2.name, node2.id, node2.type_name,
+                node2.get_notes_as_md(db.session), rel, link.id if link else ""])
 
         output = make_response(si.getvalue())
         output.headers["Content-Disposition"] = "attachment; filename=export.csv"

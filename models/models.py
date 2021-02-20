@@ -21,7 +21,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import InterfaceError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship, deferred
+from sqlalchemy.orm import relationship, deferred, joinedload
 from sqlalchemy.orm.attributes import flag_modified
 import requests
 from sqlalchemy.sql.operators import is_distinct_from
@@ -138,16 +138,10 @@ class Node(Base):
     brain = relationship(Brain, foreign_keys=[brain_id])
     # siblings = relationship("Node", secondary="Link")
 
-    def get_html_notes_att(self, session):
-        return session.query(Attachment).filter(
-            Attachment.node==self, Attachment.att_type==AttachmentType.NotesV9,
-            Attachment.text_content != None
-        ).first()
-
     def get_html_notes(self, session):
-        att = self.get_html_notes_att(session)
-        if att:
-            return att.text_content
+        atts = self.html_attachments
+        if atts:
+            return atts[0].text_content
 
     def get_notes_as_md(self, session):
         notes = self.get_md_notes(session)
@@ -167,20 +161,15 @@ class Node(Base):
             from .utils import process_markdown
             return process_markdown(notes)
 
-    def get_md_notes_att(self, session):
-        return session.query(Attachment).filter(
-            Attachment.node == self, Attachment.att_type == AttachmentType.InternalFile,
-            Attachment.location == "Notes.md", Attachment.data['noteType'] == "4"
-        ).first()
-
     def get_md_notes(self, session):
-        att = self.get_md_notes_att(session)
-        if att:
-            return att.text_content
+        atts = self.md_attachments
+        if atts:
+            return atts[0].text_content
 
     def get_neighbour_data(
             self, session, parents=True, children=True, siblings=True,
-            jumps=True, tags=True, of_tags=True, full=False, with_links=False):
+            jumps=True, tags=True, of_tags=True, full=False, with_links=False,
+            with_attachments=False):
         queries = []
         entities = [Node] if full else [Node.id, Node.name]
         if with_links:
@@ -230,6 +219,10 @@ class Node(Base):
         query = queries.pop()
         if queries:
             query = query.union_all(*queries)
+        if with_attachments:
+            query = query.options(
+                joinedload(Node.html_attachments),
+                joinedload(Node.md_attachments))
         return query.all()
 
     @classmethod
@@ -496,3 +489,16 @@ class Attachment(Base):
     @ property
     def name(self):
         return self.data.get('name', self.data['location'])
+
+
+Node.html_attachments = relationship(
+    Attachment, primaryjoin=(Attachment.node_id==Node.id)
+    & (Attachment.att_type==AttachmentType.NotesV9)
+    & (Attachment.text_content != None))
+
+Node.md_attachments = relationship(
+    Attachment, primaryjoin=(Attachment.node_id==Node.id)
+    & (Attachment.att_type==AttachmentType.InternalFile)
+    & (Attachment.location == "Notes.md")
+    & (Attachment.data['noteType'] == "4")
+    & (Attachment.text_content != None))
