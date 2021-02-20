@@ -169,7 +169,7 @@ class Node(Base):
             return atts[0].text_content
 
     def get_neighbour_data(
-            self, session, parents=True, children=True, siblings=True,
+            self, session, private=False, parents=True, children=True, siblings=True,
             jumps=True, tags=True, of_tags=True, full=False, text_links=False,
             text_backlinks=False, with_links=False, with_attachments=False):
         queries = []
@@ -181,38 +181,56 @@ class Node(Base):
                 literal('parent'), *entities).join(
                 Link, Node.child_links).filter(
                 (Link.child_id == self.id) & (Link.relation != LinkRelation.Jump))
+            if not private:
+                parent_query = parent_query.filter(Node.private == False)
         if parents:
             queries.append(parent_query)
         if children:
-            queries.append(session.query(
+            query = session.query(
                 literal('child'), *entities).join(
                 Link, Node.parent_links).filter(
-                (Link.parent_id == self.id) & (Link.relation != LinkRelation.Jump)))
+                (Link.parent_id == self.id) & (Link.relation != LinkRelation.Jump))
+            if not private:
+                query = query.filter(Node.private == False)
+            queries.append(query)
         if siblings:
             subquery = parent_query.with_entities(Node.id).subquery()
-            queries.append(session.query(
+            query = session.query(
                 literal('sibling'), *entities).join(
                 Link, Node.parent_links).filter(
                 Link.parent_id.in_(subquery) &
-                (Node.id != self.id) & (Link.relation != LinkRelation.Jump)))
+                (Node.id != self.id) & (Link.relation != LinkRelation.Jump))
+            if not private:
+                query = query.filter(Node.private == False)
+            queries.append(query)
         if jumps:
-            queries.append(session.query(
+            query = session.query(
                 literal('jump'), *entities).join(
                 Link, Node.parent_links).filter(
-                (Link.parent_id == self.id) & (Link.relation == LinkRelation.Jump)))
-            queries.append(session.query(
+                (Link.parent_id == self.id) & (Link.relation == LinkRelation.Jump))
+            if not private:
+                query = query.filter(Node.private == False)
+            queries.append(query)
+            query = session.query(
                 literal('jump'), *entities).join(
                 Link, Node.child_links).filter(
-                (Link.child_id == self.id) & (Link.relation == LinkRelation.Jump)))
+                (Link.child_id == self.id) & (Link.relation == LinkRelation.Jump))
+            if not private:
+                query = query.filter(Node.private == False)
+            queries.append(query)
         if tags and self.tags:
             query = session.query(
                 literal('tag'), *entities).filter(Node.id.in_(self.tags))
+            if not private:
+                query = query.filter(Node.private == False)
             if with_links:
                 query = query.outerjoin(Link, Link.id == None)
             queries.append(query)
         if of_tags:
             query = session.query(
                 literal('of_tag'), *entities).filter(Node.tags.contains([self.id]))
+            if not private:
+                query = query.filter(Node.private == False)
             if with_links:
                 query = query.outerjoin(Link, Link.id == None)
             queries.append(query)
@@ -220,6 +238,8 @@ class Node(Base):
             query=session.query(
                 literal('text_link'), *entities).filter(
                     Node.id.in_(self.text_links), Node.brain_id==self.brain.id)
+            if not private:
+                query = query.filter(Node.private == False)
             if with_links:
                 query = query.outerjoin(Link, Link.id == None)
             queries.append(query)
@@ -227,6 +247,8 @@ class Node(Base):
             query=session.query(
                 literal('text_backlink'), *entities).filter(
                     Node.text_links.contains([self.id]), Node.brain_id==self.brain.id)
+            if not private:
+                query = query.filter(Node.private == False)
             if with_links:
                 query = query.outerjoin(Link, Link.id == None)
             queries.append(query)
