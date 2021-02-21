@@ -168,6 +168,11 @@ class Node(Base):
         if atts:
             return atts[0].text_content
 
+    def url_link(self):
+        atts = self.url_link_attachments
+        if atts:
+            return atts[0].location
+
     def get_neighbour_data(
             self, session, private=False, parents=True, children=True, siblings=True,
             jumps=True, tags=True, of_tags=True, full=False, text_links=False,
@@ -260,7 +265,8 @@ class Node(Base):
         if with_attachments:
             query = query.options(
                 joinedload(Node.html_attachments),
-                joinedload(Node.md_attachments))
+                joinedload(Node.md_attachments),
+                joinedload(Node.url_link_attachments))
         return query.all()
 
     @classmethod
@@ -545,3 +551,7 @@ Node.md_attachments = relationship(
     & (Attachment.location == "Notes.md")
     & (Attachment.data['noteType'] == "4")
     & (Attachment.text_content != None))
+
+Node.url_link_attachments = relationship(
+    Attachment, primaryjoin=(Attachment.node_id==Node.id)
+    & (Attachment.att_type==AttachmentType.ExternalUrl))

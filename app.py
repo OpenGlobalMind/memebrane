@@ -195,11 +195,11 @@ def get_thought_route(brain_slug, thought_id):
     elif mimetype == 'text/csv':
         si = StringIO()
         cw = csv.writer(si)
-        cw.writerow(["Name", "Node_UUID", "Node_Type", "Notes", "Link_Type", "Link_UUID"])
-        cw.writerow([node.name, node.id, node.type_name, node.get_notes_as_md(), "self", ""])
+        cw.writerow(["Name", "Node_UUID", "Node_Type", "URL", "Notes", "Link_Type", "Link_UUID"])
+        cw.writerow([node.name, node.id, node.type_name, node.url_link(), node.get_notes_as_md(), "self", ""])
         for rel, node2, link in node.get_neighbour_data(
                 db.session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True):
-            cw.writerow([node2.name, node2.id, node2.type_name,
+            cw.writerow([node2.name, node2.id, node2.type_name, node2.url_link(),
                 node2.get_notes_as_md(), rel, link.id if link else ""])
 
         output = make_response(si.getvalue())
