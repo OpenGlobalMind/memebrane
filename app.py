@@ -193,12 +193,21 @@ def get_thought_route(brain_slug, thought_id):
             return data
         return recompose_data(node)[1]
     elif mimetype == 'text/csv':
+        neighbours = list(node.get_neighbour_data(
+                db.session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True))
+        reread = False
+        for rel, node2, link in neighbours:
+            if not node2.read_as_focus:
+                node2 = get_node(db.session, brain, node2.id, force=True)
+                reread = True
+        if reread:
+            neighbours = node.get_neighbour_data(
+                db.session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True)
         si = StringIO()
         cw = csv.writer(si)
         cw.writerow(["Name", "Node_UUID", "Node_Type", "URL", "Notes", "Link_Type", "Link_UUID"])
         cw.writerow([node.name, node.id, node.type_name, node.url_link(), node.get_notes_as_md(), "self", ""])
-        for rel, node2, link in node.get_neighbour_data(
-                db.session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True):
+        for rel, node2, link in neighbours:
             cw.writerow([node2.name, node2.id, node2.type_name, node2.url_link(),
                 node2.get_notes_as_md(), rel, link.id if link else ""])
 
