@@ -302,12 +302,12 @@ class Node(Base):
             return NodeType.Normal.name
 
     @ classmethod
-    def create_or_update_from_json(cls, session, data, force=False):
+    def create_or_update_from_json(cls, session, data, focus=False, force=False):
         i = session.query(cls).filter_by(id=data["id"]).first()
         if i:
-            i.update_from_json(data, force)
+            i.update_from_json(data, focus, force)
         else:
-            i = cls.create_from_json(data)
+            i = cls.create_from_json(data, focus)
         return i
 
     def update_from_json(self, data, focus=False, force=False):
