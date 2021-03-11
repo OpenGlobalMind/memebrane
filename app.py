@@ -7,7 +7,7 @@ import csv
 from flask import Flask, redirect, render_template, request, Response, make_response
 from flask_sqlalchemy import SQLAlchemy
 import requests
-from sqlalchemy.orm import undefer
+from sqlalchemy.orm import undefer, aliased
 from sqlalchemy.sql import func
 
 from models import mbconfig, text_index_langs, postgres_language_configurations
@@ -39,6 +39,13 @@ BRAIN_URL_RE = re.compile(
     r'https://app.thebrain.com/brains/(?P<brain_id>[^/]+)/thoughts/(?P<thought_id>[^/]+)')
 
 
+@app.route("/brain")
+def list_brains():
+    brains = db.session.query(Brain).all()
+    return render_template(
+        "list_brains.html", brains=brains)
+
+
 @app.route("/brain/<brain_slug>")
 def base_brain(brain_slug):
     brain = get_brain(db.session, brain_slug)
@@ -46,13 +53,16 @@ def base_brain(brain_slug):
         return Response("No such brain", status=404)
     # TODO: check if the brain really exists. Record failure in DB otherwise
     if request.accept_mimetypes.best != 'application/json':
-        if not brain.base_id:
-            return Response("No base_id", status=404)
-        return redirect(f'/brain/{brain.safe_slug}/thought/{brain.base_id}', code=302)
-    nodes = db.session.query(Node.data).filter_by(brain_id=brain.id).all()
-    links = db.session.query(Link.data).filter_by(brain_id=brain.id).all()
+        node_id = brain.base_id or brain.top_node_id(db)
+        return redirect(f'/brain/{brain.safe_slug}/thought/{node_id}', code=302)
+    nodes = db.session.query(Node.data).filter_by(brain_id=brain.id, private=False).all()
+    n1 = aliased(Node)
+    n2 = aliased(Node)
+    links = db.session.query(Link.data).filter_by(brain_id=brain.id
+        ).join(n1, (Link.parent_id==n1.id) & (n1.private==False)
+        ).join(n2, (Link.child_id==n2.id) & (n2.private==False)).all()
     attachments = db.session.query(
-        Attachment.data).filter_by(brain_id=brain.id).all()
+        Attachment.data).join(Node).filter_by(brain_id=brain.id, private=False).all()
     return dict(nodes=nodes, links=links, attachments=attachments)
 
 

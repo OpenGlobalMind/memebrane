@@ -18,15 +18,30 @@ CONFIG_BRAINS = None
 BRAINS = {}
 
 
-def get_thought_data(brain_id, thought_id):
-    print(thought_id)
-    r = requests.get(
-        f"https://api.thebrain.com/{BRAIN_API}/brains/{brain_id}/thoughts/{thought_id}/graph")
-    try:
-        return r.json()
-    except Exception as e:
-        return None
-
+def get_thought_data(brain_id, thought_id, graph=True):
+    base = f"https://api.thebrain.com/{BRAIN_API}/brains/{brain_id}/thoughts/{thought_id}"
+    if graph:
+        r = requests.get(base + "/graph")
+        if r.ok:
+            try:
+                return r.json()
+            except Exception as e:
+                pass
+    else:
+        r1 = requests.get(base + "/note")
+        if not r1.ok:
+            return None
+        r2 = requests.get(base)
+        if not r2.ok:
+            return None
+        try:
+            r1 = r1.json()
+            r2 = r2.json()
+        except Exception as e:
+            return None
+        return {
+            # TODO
+        }
 
 def get_config_brains():
     global CONFIG_BRAINS
@@ -148,7 +163,7 @@ def populate_brains(session, brains):
         session.add(brain)
 
 
-def add_to_cache(session, brain_id, data, force=False):
+def add_to_cache(session, brain_id, data, force=False, graph=True):
     root_id = data['root']['id']
     nodes = {t['id']: t for t in data["thoughts"]}
     nodes.update({t['id']: t for t in data["tags"]})
@@ -172,7 +187,9 @@ def add_to_cache(session, brain_id, data, force=False):
     links_in_cache = session.query(Link).filter(
         Link.id.in_(links.keys()), Link.brain_id==brain_id)
     for link in links_in_cache:
-        link.update_from_json(links.pop(link.id), force)
+        link_data = links.pop(link.id, None)
+        if link_data:
+            link.update_from_json(link_data, force)
     for ldata in links.values():
         if ldata['thoughtIdA'] in node_ids and ldata['thoughtIdB'] in node_ids:
             session.add(Link.create_from_json(ldata))
@@ -193,22 +210,23 @@ def add_to_cache(session, brain_id, data, force=False):
             pass
 
     for attachment in attachments_in_cache:
-        adata = attachments.pop(attachment.id)
-        attachment.update_from_json(
-            adata, get_content(adata, data), force=force)
-    # TODO: Should I delete absent attachments?
+        adata = attachments.pop(attachment.id, None)
+        if adata:
+            attachment.update_from_json(
+                adata, get_content(adata, data), force=force)
+    # TODO: Should I delete absent attachments? only if graph of course
     for adata in attachments.values():
         session.add(Attachment.create_from_json(adata, get_content(adata, data)))
     session.commit()
 
 
-def get_node(session, brain, id, cache_staleness=timedelta(days=1), force=False):
+def get_node(session, brain, id, cache_staleness=timedelta(days=1), force=False, graph=True):
     node = session.query(Node).filter_by(id=id, brain_id=brain.id).first()
     data = None
     if force or not node or cache_staleness is None or not node.read_as_focus or datetime.now() - node.last_read > cache_staleness:
-        data = get_thought_data(brain.id, id)
+        data = get_thought_data(brain.id, id, graph)
         if data:
-            add_to_cache(session, brain.id, data, force)
+            add_to_cache(session, brain.id, data, force, graph)
             if not node:
                 node = session.query(Node).filter_by(
                     id=id, brain_id=brain.id).first()

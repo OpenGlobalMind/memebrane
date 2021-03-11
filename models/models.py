@@ -25,6 +25,7 @@ from sqlalchemy.orm import relationship, deferred, joinedload
 from sqlalchemy.orm.attributes import flag_modified
 import requests
 from sqlalchemy.sql.operators import is_distinct_from
+from sqlalchemy.sql.functions import count
 from langdetect import detect_langs
 from bleach import Cleaner
 
@@ -109,6 +110,11 @@ class Brain(Base):
     def safe_slug(self):
         return self.slug or self.id
 
+    def top_node_id(self, db):
+        "The ID of the public node with the most outgoing links."
+        return db.session.query(Link.parent_id).filter_by(brain_id=self.id
+            ).join(Node, (Node.id==Link.parent_id) & (Node.private==False)
+            ).group_by(Link.parent_id).order_by(count(Link.id).desc()).limit(1).one()[0]
 
 class Node(Base):
     __tablename__ = "node"

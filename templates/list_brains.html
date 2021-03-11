@@ -1,0 +1,14 @@
+<html>
+  <head>
+    <title>MemeBrane brains</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <h1>List of brains</h1>
+    <ul>
+      {% for brain in brains %}
+      <li><a href="/brain/{{brain.safe_slug}}{% if brain.base_id %}/thought/{{ brain.base_id }}/{% endif %}">{{ brain.name or brain.safe_slug }}</a></li>
+      {% endfor %}
+    </ul>
+  </body>
+</html>
