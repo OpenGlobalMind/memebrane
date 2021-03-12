@@ -10,7 +10,7 @@
       <br/>
       {% if langs %}
       <label for="lang">Language</label>
-      <select id="lang">
+      <select name="lang" id="lang">
         <option value="simple">any</option>
         {% for lang, lname in langs.items() %}
         <option value="{{lang}}">{{lname}}</option>
