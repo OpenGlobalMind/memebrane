@@ -85,22 +85,22 @@ def search(brain_slug):
     pglang = 'simple'
     if lang in text_index_langs:
         pglang = postgres_language_configurations.get(lang, 'simple')
-    matchargs = dict(postgresql_regconfig=pglang) if lang else {}
-    txtarg = func.to_tsvector(pglang, Node.name)
-    filter = txtarg.match(terms, **matchargs)
-    rank = [func.ts_rank_cd(txtarg, func.to_tsquery(pglang, terms)).desc()]
+    matchargs = dict(postgresql_regconfig=pglang)  # if lang else {}
+    txtarg1 = func.to_tsvector(pglang, Node.name)
+    filter = txtarg1.match(terms, **matchargs)
+    rank = func.ts_rank(txtarg1, func.to_tsquery(pglang, terms), 1)
     query = db.session.query(Node.id, Node.name).filter_by(brain=brain, private=False)
     use_notes = request.args.get('notes', None)
     if use_notes:
-        query = query.join(Attachment)
-        txtarg = func.to_tsvector(pglang, Attachment.text_content)
-        tfilter = txtarg.match(terms, **matchargs)
-        rank += [func.ts_rank_cd(txtarg, func.to_tsquery(pglang, terms)).desc()]
+        query = query.outerjoin(Attachment)
+        txtarg2 = func.to_tsvector(pglang, Attachment.text_content)
+        tfilter = txtarg2.match(terms, **matchargs)
+        rank = func.coalesce(rank, 0) + 2 * func.coalesce(func.ts_rank_cd(txtarg2, func.to_tsquery(pglang, terms), 1), 0)
         if lang:
-            filter = filter | (Attachment.inferred_locale == lang & tfilter)
+            filter = filter | ((Attachment.inferred_locale == lang) & tfilter)
         else:
             filter = filter | tfilter
-    nodes = query.filter(filter).order_by(*rank).offset(start).limit(limit).all()
+    nodes = query.filter(filter).order_by(rank.desc()).offset(start).limit(limit).all()
     prev_link = next_link = None
     if len(nodes) == limit:
         next_start = start + limit
