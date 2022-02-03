@@ -96,6 +96,7 @@ def search(brain_slug):
     rank = func.ts_rank(txtarg1, func.to_tsquery(pglang, terms), 1)
     query = db.session.query(Node.id, Node.name).filter_by(brain=brain, private=False)
     use_notes = request.args.get('notes', None)
+    use_notes = use_notes and use_notes.lower() in ['true', 'on', 'checked', 'yes']
     if use_notes:
         query = query.outerjoin(Attachment)
         txtarg2 = func.to_tsvector(pglang, Attachment.text_content)
@@ -123,8 +124,8 @@ def search(brain_slug):
             prev_link += "&lang=" + lang
     mimetype = request.args.get("mimetype", request.accept_mimetypes.best)
     if mimetype == 'application/json':
-        return dict(start=start+1, end=start+len(nodes), limit=limit,
-            results={n.id: n.name for n in nodes}
+        return dict(start=start+1, end=start+len(nodes), limit=limit, lang=lang,
+            notes=use_notes, results={n.id: n.name for n in nodes}
         )
 
     return render_template(
