@@ -3,6 +3,7 @@ import re
 from mimetypes import guess_type
 from io import StringIO
 import csv
+import os
 
 from flask import Flask, redirect, render_template, request, Response, make_response
 from flask_sqlalchemy import SQLAlchemy
@@ -20,12 +21,14 @@ from models.utils import (
 
 
 app = Flask(__name__)
-app.config['FLASK_DEBUG'] = True
-app.config['TESTING'] = True
 app.config['STATIC_FOLDER'] = '/static'
 app.config['TEMPLATES_FOLDER'] = '/templates'
 app.config['SQLALCHEMY_DATABASE_URI'] = mbconfig['dburl']
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+if os.environ.get('FLASK_ENV') == 'development':
+    app.config['FLASK_DEBUG'] = True
+    app.config['TESTING'] = True
+
 db = SQLAlchemy(app)
 CORS(app)
 
