@@ -5,7 +5,7 @@
   <body>
     <div>
       {% if prev_link %}<a href="{{prev_link}}">&lt;</a>{% endif %}
-      Results for {{query}}:
+      Results {{start}}-{{end}} for {{query}}:
       {% if next_link %}<a href="{{next_link}}">&gt;</a>{% endif %}
       <ol start={{start}}>
       {% for id, name in nodes %}

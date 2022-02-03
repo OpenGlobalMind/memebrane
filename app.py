@@ -118,7 +118,7 @@ def search(brain_slug):
             prev_link += "&lang=" + lang
     return render_template(
         "search_results.html", nodes=nodes, brain=brain, query=terms,
-        start=start+1, prev_link=prev_link, next_link=next_link)
+        start=start+1, end=start+len(nodes), prev_link=prev_link, next_link=next_link)
 
 
 @app.route("/url", methods=['POST'])
