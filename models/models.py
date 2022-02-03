@@ -5,7 +5,7 @@ from re import A
 
 from isodate import parse_datetime
 from sqlalchemy import (
-    Binary,
+    BINARY,
     Boolean,
     Column,
     ForeignKey,
@@ -439,7 +439,7 @@ class Attachment(Base):
     node_id = Column(UUID, ForeignKey(
         Node.id, ondelete="CASCADE"), nullable=False)
     att_type = Column(Enum(AttachmentType))
-    content = deferred(Column(Binary))
+    content = deferred(Column(BINARY))
     text_content = Column(Text)
     inferred_locale = Column(String(3))
     node = relationship(Node, backref="attachments")

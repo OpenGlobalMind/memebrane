@@ -6,6 +6,7 @@ import csv
 
 from flask import Flask, redirect, render_template, request, Response, make_response
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 import requests
 from sqlalchemy.orm import undefer, aliased
 from sqlalchemy.sql import func
@@ -20,12 +21,13 @@ from models.utils import (
 
 app = Flask(__name__)
 app.config['FLASK_DEBUG'] = True
+app.config['TESTING'] = True
 app.config['STATIC_FOLDER'] = '/static'
 app.config['TEMPLATES_FOLDER'] = '/templates'
 app.config['SQLALCHEMY_DATABASE_URI'] = mbconfig['dburl']
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
-
+CORS(app)
 
 @app.route("/")
 def home():
@@ -199,9 +201,7 @@ def get_thought_route(brain_slug, thought_id):
 
     mimetype = request.args.get("mimetype", request.accept_mimetypes.best)
     if mimetype == 'application/json':
-        if data:
-            return data
-        return recompose_data(node)[1]
+        return data or recompose_data(node)[1]
     elif mimetype == 'text/csv':
         neighbours = list(node.get_neighbour_data(
                 db.session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True))
