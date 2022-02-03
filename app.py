@@ -121,6 +121,12 @@ def search(brain_slug):
             prev_link += "&notes=true"
         if lang:
             prev_link += "&lang=" + lang
+    mimetype = request.args.get("mimetype", request.accept_mimetypes.best)
+    if mimetype == 'application/json':
+        return dict(start=start+1, end=start+len(nodes), limit=limit,
+            results={n.id: n.name for n in nodes}
+        )
+
     return render_template(
         "search_results.html", nodes=nodes, brain=brain, query=terms,
         start=start+1, end=start+len(nodes), prev_link=prev_link, next_link=next_link)
