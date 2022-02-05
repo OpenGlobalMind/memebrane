@@ -176,7 +176,7 @@ def recompose_data(node):
             thoughts.append(node_.data)
             links.append(link.data)
     attachments = [dict(
-        id=att.id, location=att.adjusted_location, type=attachment.att_type.name, name=att.name)
+        id=att.id, location=att.location_adjusted, type=att.att_type.name, name=att.name)
         for att in node.attachments]
     root = dict(
         id=node.id,
