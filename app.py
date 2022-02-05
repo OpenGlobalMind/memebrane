@@ -175,9 +175,12 @@ def recompose_data(node):
         elif ltype != 'of_tag':
             thoughts.append(node_.data)
             links.append(link.data)
+    attachments = [dict(
+        id=att.id, location=att.adjusted_location, type=attachment.att_type.name, name=att.name)
+        for att in node.attachments]
     root = dict(
         id=node.id,
-        attachments=[att.id for att in node.attachments],  # TODO
+        attachments=attachments,
         jumps=list(linkst['jump'].keys()),
         parents=list(linkst['parent'].keys()),
         siblings=list(linkst['sibling'].keys()),
