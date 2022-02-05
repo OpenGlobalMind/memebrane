@@ -6,32 +6,36 @@ import re
 import base64
 import uuid
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-import requests
+from sqlalchemy.future import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.orm import sessionmaker, subqueryload, joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+import httpx
 from markdown import markdown
 
 from . import BRAIN_API
 from .models import AttachmentType, Node, Brain, Link, Attachment
 
 CONFIG_BRAINS = None
+timeout = httpx.Timeout(5.0, read=20.0)
+httpx_client = httpx.AsyncClient(timeout=timeout)
 
-
-def get_thought_data(brain_id, thought_id, graph=True):
+async def get_thought_data(brain_id, thought_id, graph=True):
     base = f"https://api.thebrain.com/{BRAIN_API}/brains/{brain_id}/thoughts/{thought_id}"
     if graph:
-        r = requests.get(base + "/graph")
-        if r.ok:
+        r = await httpx_client.get(base + "/graph")
+        if r.is_success:
             try:
                 return r.json()
             except Exception as e:
                 pass
     else:
-        r1 = requests.get(base + "/note")
-        if not r1.ok:
+        r1 = await httpx_client.get(base + "/note")
+        if not r1.is_success:
             return None
-        r2 = requests.get(base)
-        if not r2.ok:
+        r2 = await httpx_client.get(base)
+        if not r2.is_success:
             return None
         try:
             r1 = r1.json()
@@ -94,51 +98,59 @@ def extract_text_links_from_data(data):
     return extract_text_links(data.get("notesHtml", None), brain_id) \
         or extract_text_links(data.get("notesMarkdown", None), brain_id)
 
-
-def get_brain(session, slug):
+async def get_brain(session, slug):
     global CONFIG_BRAINS
     get_config_brains()
     if UUID_RE.match(slug):
         brain_data = [b for b in CONFIG_BRAINS.values()
                         if b['brain'] == slug]
-        brain = session.query(Brain).filter_by(id=slug).first()
+        brain = await session.scalar(select(Brain).filter_by(id=slug))
         if not brain:
             if brain_data:
                 brain_data = brain_data[0]
-                brain = add_brain(session, brain_data['brain'], slug,
+                brain = await add_brain(session, brain_data['brain'], slug,
                                     brain_data['name'], brain_data.get('thought', None))
             else:
-                brain = add_brain(session, slug)
+                brain = await add_brain(session, slug)
     else:
-        brain = session.query(Brain).filter_by(slug=slug).first()
+        brain = await session.scalar(select(Brain).filter_by(slug=slug))
         brain_data = CONFIG_BRAINS.get(slug, None)
         if brain_data and not brain:
-            brain = add_brain(session, brain_data['brain'], slug,
+            brain = await add_brain(session, brain_data['brain'], slug,
                                 brain_data['name'], brain_data.get('thought', None))
     return brain
 
 
-def add_brain(session, id, slug=None, name=None, base_id=None):
+async def add_brain(session, id, slug=None, name=None, base_id=None):
+    global BRAINS
     brain = Brain(id=id, name=name, base_id=base_id, slug=slug)
     session.add(brain)
-    session.commit()
+    await session.commit()
     return brain
 
 
-def get_engine(password='memebrane', user='memebrane', host='localhost', db='memebrane', port=5432):
+def get_engine(password='memebrane', user='memebrane', host='localhost', db='memebrane', port=5432, _async=True):
     # TODO eliminate
-    return create_engine(f'postgresql://{user}:{password}@{host}:{port}/{db}')
+    if _async:
+        return create_async_engine(f'postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}')
+    else:
+        return create_engine(f'postgresql://{user}:{password}@{host}:{port}/{db}')
 
 
-def engine_from_config():
+def engine_from_config(_async=True):
     config = ConfigParser()
     config.read('config.ini')
-    return create_engine(config['memebrane']['dburl'])
+    url = config['memebrane']['dburl']
+    if not _async:
+        return create_engine(url)
+    if url.startswith('postgresql:'):
+        url = url[:10] + '+asyncpg' + url[10:]
+    return create_async_engine(url)
 
 
-def get_session(engine=None):
-    engine = engine or engine_from_config()
-    Session = sessionmaker(bind=engine)
+def get_session(engine=None, _async=True):
+    engine = engine or engine_from_config(_async)
+    Session = sessionmaker(bind=engine, class_=AsyncSession if _async else None)
     return Session()
 
 
@@ -149,14 +161,14 @@ def populate_brains(session, brains):
         session.add(brain)
 
 
-def add_to_cache(session, brain_id, data, force=False, graph=True):
+async def add_to_cache(session, brain_id, data, force=False, graph=True):
     root_id = data['root']['id']
     nodes = {t['id']: t for t in data["thoughts"]}
     nodes.update({t['id']: t for t in data["tags"]})
     node_ids = set(nodes.keys())
-    nodes_in_cache = session.query(Node).filter(
-        Node.id.in_(nodes.keys()), Node.brain_id==brain_id)
-    for node in nodes_in_cache:
+    nodes_in_cache = await session.execute(select(Node).filter(
+        Node.id.in_(nodes.keys()), Node.brain_id==brain_id))
+    for (node,) in nodes_in_cache:
         node_data = nodes.pop(node.id)
         focus = node.id == root_id
         if focus and 'tags' in data:
@@ -168,11 +180,11 @@ def add_to_cache(session, brain_id, data, force=False, graph=True):
             node_data['tags'] = data.get('tags', [])
         session.add(Node.create_from_json(
             node_data, node_data['id'] == root_id))
-    session.flush()
+    await session.flush()
     links = {l['id']: l for l in data.get("links", ())}
-    links_in_cache = session.query(Link).filter(
-        Link.id.in_(links.keys()), Link.brain_id==brain_id)
-    for link in links_in_cache:
+    links_in_cache = await session.execute(select(Link).filter(
+        Link.id.in_(links.keys()), Link.brain_id==brain_id))
+    for (link,) in links_in_cache:
         link_data = links.pop(link.id, None)
         if link_data:
             link.update_from_json(link_data, force)
@@ -182,8 +194,8 @@ def add_to_cache(session, brain_id, data, force=False, graph=True):
         else:
             print(f"Missing node for this link:{ldata}")
     attachments = {l['id']: l for l in data.get("attachments", ())}
-    attachments_in_cache = session.query(Attachment).filter(
-        Attachment.id.in_(attachments.keys()))
+    attachments_in_cache = await session.execute(select(Attachment).filter(
+        Attachment.id.in_(attachments.keys())))
     def get_content(adata, data):
         content = None
         atype = adata.get("type", 0)
@@ -195,27 +207,34 @@ def add_to_cache(session, brain_id, data, force=False, graph=True):
             # TODO: Should I get the attachment content from the link?
             pass
 
-    for attachment in attachments_in_cache:
+    for (attachment,) in attachments_in_cache:
         adata = attachments.pop(attachment.id, None)
         if adata:
             attachment.update_from_json(
                 adata, get_content(adata, data), force=force)
     # TODO: Should I delete absent attachments? only if graph of course
     for adata in attachments.values():
-        session.add(Attachment.create_from_json(adata, get_content(adata, data)))
-    session.commit()
+        await session.add(Attachment.create_from_json(adata, get_content(adata, data)))
+    await session.commit()
 
 
-def get_node(session, brain, id, cache_staleness=timedelta(days=1), force=False, graph=True):
-    node = session.query(Node).filter_by(id=id, brain_id=brain.id).first()
+async def get_node(session, brain, id, cache_staleness=timedelta(days=1), force=False, graph=True):
+    node = await session.scalar(
+        select(Node).filter_by(id=id, brain_id=brain.id).options(
+        joinedload(Node.html_attachments),
+        joinedload(Node.md_attachments),
+        joinedload(Node.parent_links),
+        subqueryload(Node.child_links), 
+        subqueryload(Node.attachments),
+        subqueryload(Node.url_link_attachments)))
     data = None
     if force or not node or cache_staleness is None or not node.read_as_focus or datetime.now() - node.last_read > cache_staleness:
-        data = get_thought_data(brain.id, id, graph)
+        data = await get_thought_data(brain.id, id, graph)
         if data:
-            add_to_cache(session, brain.id, data, force, graph)
+            await add_to_cache(session, brain.id, data, force, graph)
             if not node:
-                node = session.query(Node).filter_by(
-                    id=id, brain_id=brain.id).first()
+                node = await session.scalar(select(Node).filter_by(
+                    id=id, brain_id=brain.id))
     return node, data
 
 

@@ -1,10 +1,13 @@
+import asyncio
+
 import simplejson as json
 
 from .models import Node, Link, Attachment, AttachmentType
 from .utils import get_brain, get_session, lcase_json, get_session
 
 
-def read_brain(base, session):
+async def read_brain(base):
+    session = get_session()
     node_ids = set()
     with (base / "meta.json").open() as f:
         meta = json.load(f)
@@ -14,7 +17,7 @@ def read_brain(base, session):
         for line in f:
             node = json.loads(line)
             node_ids.add(node["Id"])
-            node = Node.create_or_update_from_json(session, lcase_json(node), True)
+            node = await Node.create_or_update_from_json(session, lcase_json(node), True)
             session.add(node)
     with (base / "links.json").open() as f:
         for line in f:
@@ -23,7 +26,7 @@ def read_brain(base, session):
                     link['ThoughtIdB'] not in node_ids:
                 print("Missing link: ", link["Id"], link["ThoughtIdA"], link["ThoughtIdB"])
                 continue
-            link = Link.create_or_update_from_json(session, lcase_json(link))
+            link = await Link.create_or_update_from_json(session, lcase_json(link))
             session.add(link)
     with (base / "attachments.json").open() as f:
         for line in f:
@@ -45,10 +48,10 @@ def read_brain(base, session):
                     if contentf.exists():
                         with contentf.open(mode='rb') as f2:
                             content = f2.read()
-            att = Attachment.create_or_update_from_json(
+            att = await Attachment.create_or_update_from_json(
                 session, lcase_json(att), content)
             session.add(att)
-
+    await session.commit()
 
 if __name__ == '__main__':
     from sys import argv
@@ -59,6 +62,4 @@ if __name__ == '__main__':
         root = zipfile.Path(zipfile.ZipFile(root.open('rb')))
     else:
         assert root.is_dir()
-    session = get_session()
-    read_brain(root, session)
-    session.commit()
+    asyncio.run(read_brain(root))

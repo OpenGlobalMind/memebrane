@@ -20,15 +20,16 @@ from sqlalchemy import (
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import InterfaceError
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func, cast
-from sqlalchemy.orm import relationship, deferred, joinedload
+from sqlalchemy.sql import func, cast, text
+from sqlalchemy.orm import relationship, deferred, subqueryload, joinedload
 from sqlalchemy.orm.attributes import flag_modified
-import requests
+from sqlalchemy.future import select
 from sqlalchemy.sql.operators import is_distinct_from
 from sqlalchemy.sql.functions import count
 from sqlalchemy.sql.type_api import TypeEngine
 from langdetect import detect_langs
 from bleach import Cleaner
+
 
 if True:
     from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
@@ -43,10 +44,12 @@ if True:
 
 
     PGTypeCompiler.visit_regconfig = lambda self, type_, **kw: "regconfig"
+
 else:
     UUID = String
     JSONB = Text
 from . import BRAIN_API, text_index_langs, postgres_language_configurations
+
 
 def as_reg_class(lang='simple'):
     return cast(lang, regconfig)
@@ -107,11 +110,7 @@ class AttachmentType(enum.Enum):
     MarkdownImage = 12
 
 
-class BaseOps(object):
-    pass
-
-
-Base = declarative_base(cls=BaseOps)
+Base = declarative_base()
 
 
 class Brain(Base):
@@ -125,11 +124,11 @@ class Brain(Base):
     def safe_slug(self):
         return self.slug or self.id
 
-    def top_node_id(self, db):
+    async def top_node_id(self, db):
         "The ID of the public node with the most outgoing links."
-        return db.session.query(Link.parent_id).filter_by(brain_id=self.id
+        return await db.session.scalar(select(Link.parent_id).filter_by(brain_id=self.id
             ).join(Node, (Node.id==Link.parent_id) & (Node.private==False)
-            ).group_by(Link.parent_id).order_by(count(Link.id).desc()).limit(1).one()[0]
+            ).group_by(Link.parent_id).order_by(count(Link.id).desc()).limit(1))
 
 class Node(Base):
     __tablename__ = "node"
@@ -137,7 +136,7 @@ class Node(Base):
         Index("node_tags_idx", 'tags', postgresql_using='gin'),
         Index("node_text_links_idx", 'text_links', postgresql_using='gin'),
         Index("node_name_vidx",
-              func.to_tsvector(as_reg_class('simple'), 'node.name'),
+              func.to_tsvector(as_reg_class(), 'node.name'),
               postgresql_using='gin'),
     ] + [
         Index(f"node_name_{lang}_vidx",
@@ -194,7 +193,7 @@ class Node(Base):
         if atts:
             return atts[0].location
 
-    def get_neighbour_data(
+    async def get_neighbour_data(
             self, session, private=False, parents=True, children=True, siblings=True,
             jumps=True, tags=True, of_tags=True, full=False, text_links=False,
             text_backlinks=False, with_links=False, with_attachments=False):
@@ -203,7 +202,7 @@ class Node(Base):
         if with_links:
             entities.append(Link)
         if parents or siblings:
-            parent_query = session.query(
+            parent_query = select(
                 literal('parent'), *entities).join(
                 Link, Node.child_links).filter(
                 (Link.child_id == self.id) & (Link.relation != LinkRelation.Jump))
@@ -212,7 +211,7 @@ class Node(Base):
         if parents:
             queries.append(parent_query)
         if children:
-            query = session.query(
+            query = select(
                 literal('child'), *entities).join(
                 Link, Node.parent_links).filter(
                 (Link.parent_id == self.id) & (Link.relation != LinkRelation.Jump))
@@ -221,7 +220,7 @@ class Node(Base):
             queries.append(query)
         if siblings:
             subquery = parent_query.with_entities(Node.id).subquery()
-            query = session.query(
+            query = select(
                 literal('sibling'), *entities).join(
                 Link, Node.parent_links).filter(
                 Link.parent_id.in_(subquery) &
@@ -230,14 +229,14 @@ class Node(Base):
                 query = query.filter(Node.private == False)
             queries.append(query)
         if jumps:
-            query = session.query(
+            query = select(
                 literal('jump'), *entities).join(
                 Link, Node.parent_links).filter(
                 (Link.parent_id == self.id) & (Link.relation == LinkRelation.Jump))
             if not private:
                 query = query.filter(Node.private == False)
             queries.append(query)
-            query = session.query(
+            query = select(
                 literal('jump'), *entities).join(
                 Link, Node.child_links).filter(
                 (Link.child_id == self.id) & (Link.relation == LinkRelation.Jump))
@@ -245,7 +244,7 @@ class Node(Base):
                 query = query.filter(Node.private == False)
             queries.append(query)
         if tags and self.tags:
-            query = session.query(
+            query = select(
                 literal('tag'), *entities).filter(Node.id.in_(self.tags))
             if not private:
                 query = query.filter(Node.private == False)
@@ -253,7 +252,7 @@ class Node(Base):
                 query = query.outerjoin(Link, Link.id == None)
             queries.append(query)
         if of_tags:
-            query = session.query(
+            query = select(
                 literal('of_tag'), *entities).filter(Node.tags.contains([self.id]))
             if not private:
                 query = query.filter(Node.private == False)
@@ -261,7 +260,7 @@ class Node(Base):
                 query = query.outerjoin(Link, Link.id == None)
             queries.append(query)
         if text_links and self.text_links:
-            query=session.query(
+            query = select(
                 literal('text_link'), *entities).filter(
                     Node.id.in_(self.text_links), Node.brain_id==self.brain.id)
             if not private:
@@ -270,7 +269,7 @@ class Node(Base):
                 query = query.outerjoin(Link, Link.id == None)
             queries.append(query)
         if text_backlinks:
-            query=session.query(
+            query = select(
                 literal('text_backlink'), *entities).filter(
                     Node.text_links.contains([self.id]), Node.brain_id==self.brain.id)
             if not private:
@@ -287,9 +286,9 @@ class Node(Base):
             query = query.options(
                 joinedload(Node.html_attachments),
                 joinedload(Node.md_attachments),
-                joinedload(Node.url_link_attachments))
+                subqueryload(Node.url_link_attachments))
         query = query.order_by(Node.name)
-        return query.all()
+        return await session.execute(query)
 
     @classmethod
     def create_from_json(cls, data, focus=False):
@@ -324,8 +323,8 @@ class Node(Base):
             return NodeType.Normal.name
 
     @ classmethod
-    def create_or_update_from_json(cls, session, data, focus=False, force=False):
-        i = session.query(cls).filter_by(id=data["id"]).first()
+    async def create_or_update_from_json(cls, session, data, focus=False, force=False):
+        i = await session.scalar(select(cls).filter_by(id=data["id"]).limit(1))
         if i:
             i.update_from_json(data, focus, force)
         else:
@@ -403,8 +402,8 @@ class Link(Base):
         )
 
     @ classmethod
-    def create_or_update_from_json(cls, session, data, force=False):
-        i = session.query(cls).filter_by(id=data["id"]).first()
+    async def create_or_update_from_json(cls, session, data, force=False):
+        i = await session.scalar(select(cls).filter_by(id=data["id"]).limit(1))
         if i:
             i.update_from_json(data, force)
         else:
@@ -462,7 +461,7 @@ class Attachment(Base):
     brain = relationship(Brain, foreign_keys=[brain_id])
     __table_args__ = tuple([
         Index("attachment_text_idx",
-              func.to_tsvector(as_reg_class('simple'), text_content),
+              func.to_tsvector(as_reg_class(), text_content),
               postgresql_using='gin')
     ] + [
         Index(f"attachment_text_{lang}_idx",
@@ -473,8 +472,8 @@ class Attachment(Base):
     ])
 
     @ classmethod
-    def create_or_update_from_json(cls, session, data, content=None, force=False):
-        i = session.query(cls).filter_by(id=data["id"]).first()
+    async def create_or_update_from_json(cls, session, data, content=None, force=False):
+        i = await session.scalar(select(cls).filter_by(id=data["id"]).limit(1))
         if i:
             i.update_from_json(data, content, force)
         else:
@@ -546,15 +545,15 @@ class Attachment(Base):
     def brain_uri(self):
         return f"https://api.thebrain.com/{BRAIN_API}/brains/{self.brain_id}/thoughts/{self.node_id}/md-images/{self.location}"
 
-    def populate_content(self, force=False):
+    async def populate_content(self, httpx, force=False):
         if self.att_type in (
                 AttachmentType.ExternalFile, AttachmentType.ExternalUrl,
                 AttachmentType.ExternalDirectory):
             return
         if (self.text_content or self.content) and not force:
             return
-        contentr = requests.get(self.brain_uri())
-        if contentr.ok:
+        contentr = await httpx.get(self.brain_uri(), follow_redirects=True)
+        if contentr.is_success:
             self.set_content(contentr.content)
 
     @ property
@@ -571,7 +570,7 @@ Node.md_attachments = relationship(
     Attachment, primaryjoin=(Attachment.node_id==Node.id)
     & (Attachment.att_type==AttachmentType.InternalFile)
     & (Attachment.location == "Notes.md")
-    & (Attachment.data['noteType'] == "4")
+    & (Attachment.data['noteType'] == func.to_jsonb(4))
     & (Attachment.text_content != None))
 
 Node.url_link_attachments = relationship(

@@ -2,7 +2,6 @@
 bleach>=3
 certifi
 flask_sqlalchemy>=2.5
-Flask>=2
 flask-cors>=3.0
 isodate>=0.6
 Jinja2
@@ -11,4 +10,11 @@ Markdown>=3
 psycopg2-binary>=2.8
 requests>=2
 simplejson>=3
-SQLAlchemy>=1.4
+SQLAlchemy[asyncio]>=1.4
+quart
+quart-auth
+quart-CORS
+quart-events
+asyncpg
+hypercorn
+httpx
