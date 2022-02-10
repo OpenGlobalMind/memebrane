@@ -20,21 +20,36 @@ from sqlalchemy import (
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import InterfaceError
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, cast
 from sqlalchemy.orm import relationship, deferred, joinedload
 from sqlalchemy.orm.attributes import flag_modified
 import requests
 from sqlalchemy.sql.operators import is_distinct_from
 from sqlalchemy.sql.functions import count
+from sqlalchemy.sql.type_api import TypeEngine
 from langdetect import detect_langs
 from bleach import Cleaner
 
 if True:
     from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
+    from sqlalchemy.dialects.postgresql.base import PGTypeCompiler
+
+    class regconfig(TypeEngine):
+
+        """Provide the PostgreSQL regconfig type.
+        """
+
+        __visit_name__ = "regconfig"
+
+
+    PGTypeCompiler.visit_regconfig = lambda self, type_, **kw: "regconfig"
 else:
     UUID = String
     JSONB = Text
 from . import BRAIN_API, text_index_langs, postgres_language_configurations
+
+def as_reg_class(lang='simple'):
+    return cast(lang, regconfig)
 
 
 cleaner = Cleaner(tags=[], strip=True, strip_comments=True)
@@ -122,11 +137,11 @@ class Node(Base):
         Index("node_tags_idx", 'tags', postgresql_using='gin'),
         Index("node_text_links_idx", 'text_links', postgresql_using='gin'),
         Index("node_name_vidx",
-              func.to_tsvector('simple', 'node.name'),
+              func.to_tsvector(as_reg_class('simple'), 'node.name'),
               postgresql_using='gin'),
     ] + [
         Index(f"node_name_{lang}_vidx",
-              func.to_tsvector(postgres_language_configurations[lang], 'node.name'),
+              func.to_tsvector(as_reg_class(postgres_language_configurations[lang]), 'node.name'),
               postgresql_using='gin')
         for lang in text_index_langs
     ])
@@ -446,11 +461,11 @@ class Attachment(Base):
     brain = relationship(Brain, foreign_keys=[brain_id])
     __table_args__ = tuple([
         Index("attachment_text_idx",
-              func.to_tsvector('simple', text_content),
+              func.to_tsvector(as_reg_class('simple'), text_content),
               postgresql_using='gin')
     ] + [
         Index(f"attachment_text_{lang}_idx",
-              func.to_tsvector(postgres_language_configurations[lang], 'text_content'),
+              func.to_tsvector(as_reg_class(postgres_language_configurations[lang]), 'text_content'),
               postgresql_using='gin',
               postgresql_where=f"inferred_locale=='{lang}'")
         for lang in text_index_langs
