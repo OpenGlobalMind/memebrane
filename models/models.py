@@ -288,6 +288,7 @@ class Node(Base):
                 joinedload(Node.html_attachments),
                 joinedload(Node.md_attachments),
                 joinedload(Node.url_link_attachments))
+        query = query.order_by(Node.name)
         return query.all()
 
     @classmethod
