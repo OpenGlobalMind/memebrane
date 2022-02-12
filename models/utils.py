@@ -15,7 +15,6 @@ from . import BRAIN_API
 from .models import AttachmentType, Node, Brain, Link, Attachment
 
 CONFIG_BRAINS = None
-BRAINS = {}
 
 
 def get_thought_data(brain_id, thought_id, graph=True):
@@ -97,45 +96,32 @@ def extract_text_links_from_data(data):
 
 
 def get_brain(session, slug):
-    global CONFIG_BRAINS, BRAINS
+    global CONFIG_BRAINS
     get_config_brains()
     if UUID_RE.match(slug):
-        brains = [b for b in BRAINS.values() if b.id == slug]
-        if brains:
-            brain = brains[0]
-            session.refresh(brain)
-        else:
-            brain_data = [b for b in CONFIG_BRAINS.values()
-                          if b['brain'] == slug]
-            brain = session.query(Brain).filter_by(id=slug).first()
-            if not brain:
-                if brain_data:
-                    brain_data = brain_data[0]
-                    brain = add_brain(session, brain_data['brain'], slug,
-                                      brain_data['name'], brain_data.get('thought', None))
-                else:
-                    brain = add_brain(session, slug)
-            BRAINS[slug] = brain  # may be None, cache that
-    else:
-        brain = BRAINS.get(slug, None)
-        if brain:
-            session.refresh(brain)
-        else:
-            brain = session.query(Brain).filter_by(slug=slug).first()
-            brain_data = CONFIG_BRAINS.get(slug, None)
-            if brain_data and not brain:
+        brain_data = [b for b in CONFIG_BRAINS.values()
+                        if b['brain'] == slug]
+        brain = session.query(Brain).filter_by(id=slug).first()
+        if not brain:
+            if brain_data:
+                brain_data = brain_data[0]
                 brain = add_brain(session, brain_data['brain'], slug,
-                                  brain_data['name'], brain_data.get('thought', None))
-            BRAINS[slug] = brain  # may be None, cache that
+                                    brain_data['name'], brain_data.get('thought', None))
+            else:
+                brain = add_brain(session, slug)
+    else:
+        brain = session.query(Brain).filter_by(slug=slug).first()
+        brain_data = CONFIG_BRAINS.get(slug, None)
+        if brain_data and not brain:
+            brain = add_brain(session, brain_data['brain'], slug,
+                                brain_data['name'], brain_data.get('thought', None))
     return brain
 
 
 def add_brain(session, id, slug=None, name=None, base_id=None):
-    global BRAINS
     brain = Brain(id=id, name=name, base_id=base_id, slug=slug)
     session.add(brain)
     session.commit()
-    BRAINS[slug] = brain
     return brain
 
 
