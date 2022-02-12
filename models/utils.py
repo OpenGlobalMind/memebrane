@@ -103,7 +103,7 @@ def get_brain(session, slug):
         brains = [b for b in BRAINS.values() if b.id == slug]
         if brains:
             brain = brains[0]
-            session.merge(brain)
+            session.refresh(brain)
         else:
             brain_data = [b for b in CONFIG_BRAINS.values()
                           if b['brain'] == slug]
@@ -119,7 +119,7 @@ def get_brain(session, slug):
     else:
         brain = BRAINS.get(slug, None)
         if brain:
-            session.merge(brain)
+            session.refresh(brain)
         else:
             brain = session.query(Brain).filter_by(slug=slug).first()
             brain_data = CONFIG_BRAINS.get(slug, None)
