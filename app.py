@@ -4,22 +4,22 @@ from mimetypes import guess_type
 from io import StringIO
 import csv
 import os
+from itertools import groupby
 
 from quart import Quart, redirect, render_template, request, Response, make_response
-from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.sql import func, cast
 from quart_cors import cors
-import requests
-from sqlalchemy.orm import undefer, aliased, sessionmaker
+
+from sqlalchemy.orm import undefer, aliased
 from sqlalchemy.sql import func
 
 from models import mbconfig, text_index_langs, postgres_language_configurations
-from models.models import Node, Brain, Link, Attachment, as_reg_class
+from models.models import Node, Brain, Link, Attachment, as_reg_class, AttachmentType
 from models.utils import (
-    get_brain, get_node, add_brain, convert_link, LINK_RE, process_markdown,
-    resolve_html_links, engine_from_config, httpx_client)
+    get_brain, get_node, add_brain, convert_link, LINK_RE, get_session_maker,
+    resolve_html_links, httpx_client)
 
 
 
@@ -33,17 +33,30 @@ if os.environ.get('QUART_ENV') == 'development':
     app.config['TESTING'] = True
 
 
-class AsyncSQLAlchemy(SQLAlchemy):
-    def create_session(self, options):
-        return sessionmaker(class_=AsyncSession, bind=engine_from_config(), expire_on_commit=False, **options)
+class SQLAMiddleware:
 
+    def __init__(self, app):
+        self.app = app
+        self.sessions = get_session_maker(expire_on_commit=False)
 
-db = AsyncSQLAlchemy(app)
+    async def __call__(self, scope, receive, send):
+        session = self.sessions()
+        scope['session'] = session
+        try:
+            return await self.app(scope, receive, send)
+        except Exception as e:
+            await session.rollback()
+            raise e from e
+        finally:
+            await session.close()
+
+app.asgi_app = SQLAMiddleware(app.asgi_app)
 cors(app)
 
 @app.route("/")
 async def home():
-    brain = await get_brain(db.session, mbconfig['default_brain'])
+    session = request.scope['session']
+    brain = await get_brain(session, mbconfig['default_brain'])
     if not brain or not brain.base_id:
         return Response(status=404)
     return redirect(f'/brain/{brain.safe_slug}/thought/{brain.base_id}', code=302)
@@ -55,29 +68,31 @@ BRAIN_URL_RE = re.compile(
 
 @app.route("/brain")
 async def list_brains():
-    brains = await db.session.query(select(Brain))
+    session = request.scope['session']
+    brains = await session.query(select(Brain))
     return await render_template(
         "list_brains.html", brains=brains)
 
 
 @app.route("/brain/<brain_slug>")
 async def base_brain(brain_slug):
-    brain = await get_brain(db.session, brain_slug)
+    session = request.scope['session']
+    brain = await get_brain(session, brain_slug)
     if not brain:
         return Response("No such brain", status=404)
     # TODO: check if the brain really exists. Record failure in DB otherwise
     if request.accept_mimetypes.best != 'application/json':
-        node_id = brain.base_id or brain.top_node_id(db)
+        node_id = brain.base_id or brain.top_node_id(session)
         return redirect(f'/brain/{brain.safe_slug}/thought/{node_id}', code=302)
-    nodes = await db.session.execute(select(Node.data).filter_by(brain_id=brain.id, private=False))
+    nodes = await session.execute(select(Node.data).filter_by(brain_id=brain.id, private=False))
     nodes = [node for (node,) in nodes]
     n1 = aliased(Node)
     n2 = aliased(Node)
-    links = await db.session.execute(select(Link.data).filter_by(brain_id=brain.id
+    links = await session.execute(select(Link.data).filter_by(brain_id=brain.id
         ).join(n1, (Link.parent_id==n1.id) & (n1.private==False)
         ).join(n2, (Link.child_id==n2.id) & (n2.private==False)))
     links = [link for (link,) in links]
-    attachments = await db.session.execute(select(
+    attachments = await session.execute(select(
         Attachment.data).join(Node).filter_by(brain_id=brain.id, private=False))
     attachments = [attachment for (attachment,) in attachments]
     return dict(nodes=nodes, links=links, attachments=attachments)
@@ -85,7 +100,8 @@ async def base_brain(brain_slug):
 
 @app.route("/brain/<brain_slug>/search")
 async def search(brain_slug):
-    brain = await get_brain(db.session, brain_slug)
+    session = request.scope['session']
+    brain = await get_brain(session, brain_slug)
     if not brain:
         return Response("No such brain", status=404)
     terms = request.args.get('query', None)
@@ -96,7 +112,7 @@ async def search(brain_slug):
             "search.html",
             brain_name=brain.name,
             langs = {lang: postgres_language_configurations[lang]
-                     for lang in text_index_langs}
+                    for lang in text_index_langs}
         )
     lang = request.args.get('lang', None)
     pglang = 'simple'
@@ -105,7 +121,7 @@ async def search(brain_slug):
     txtarg1 = func.to_tsvector(as_reg_class(pglang), Node.name)
     filter = txtarg1.op('@@')(func.websearch_to_tsquery(as_reg_class(pglang), terms))
     rank = func.ts_rank(txtarg1, func.websearch_to_tsquery(as_reg_class(pglang), terms), 1)
-    query = db.session.query(Node.id, Node.name).filter_by(brain=brain, private=False)
+    query = session.query(Node.id, Node.name).filter_by(brain=brain, private=False)
     use_notes = request.args.get('notes', None)
     use_notes = use_notes and use_notes.lower() in ['true', 'on', 'checked', 'yes']
     if use_notes:
@@ -117,7 +133,7 @@ async def search(brain_slug):
             filter = filter | ((Attachment.inferred_locale == lang) & tfilter)
         else:
             filter = filter | tfilter
-    nodes = await db.session.execute(query.filter(filter).order_by(rank.desc()).offset(start).limit(limit))
+    nodes = await session.execute(query.filter(filter).order_by(rank.desc()).offset(start).limit(limit))
     nodes = list(nodes)
     prev_link = next_link = None
     if len(nodes) == limit:
@@ -126,14 +142,14 @@ async def search(brain_slug):
         if use_notes:
             next_link += "&notes=true"
         if lang:
-            next_link += "&lang=" + lang
+            next_link += f"&lang={lang}"
     if start > 0:
         prev_start = max(0, start - limit)
         prev_link = f"/brain/{brain_slug}/search?start={prev_start}&limit={limit}&query={terms}"
         if use_notes:
             prev_link += "&notes=true"
         if lang:
-            prev_link += "&lang=" + lang
+            prev_link += f"&lang={lang}"
     mimetype = request.args.get("mimetype", request.accept_mimetypes.best)
     if mimetype == 'application/json':
         return dict(start=start+1, end=start+len(nodes), limit=limit, lang=lang,
@@ -155,16 +171,17 @@ async def url():
 
     # resolve shortened URL
     if url.startswith('https://bra.in/'):
-        r = requests.get(url)
+        r = await httpx_client.get(url)
         url = r.url
 
     # check for reasonable URL
     if url.startswith('https://app.thebrain.com/'):
         match = BRAIN_URL_RE.match(url)
         if match is not None:
+            session = request.scope['session']
             brain_id, thought_id = match.group(
                 'brain_id'), match.group('thought_id')
-            await add_brain(db.session, brain_id, slug, name, thought_id)
+            await add_brain(session, brain_id, slug, name, thought_id)
             return redirect(f'/brain/{brain_id}/thought/{thought_id}', code=302)
 
     # no joy
@@ -174,18 +191,30 @@ async def url():
     )
 
 
-async def recompose_data(node):
+async def recompose_data(node, with_attachments=False):
     linkst = dict(parent={}, child={}, sibling={}, jump={}, tag={}, of_tag={})
     thoughts = [node.data]
     links = []
     tags = []
+    session = request.scope['session']
     for ltype, node_, link in await node.get_neighbour_data(
-            db.session, full=True, with_links=True):
+            session, full=True, with_links=True, with_attachments=with_attachments):
         linkst[ltype][node_.id] = node_.name
+        data = dict(node_.data)
+        if with_attachments:
+            if node_.html_attachments:
+                data['notesHtml'] = node_.html_attachments[0].text_content
+            if node.md_attachments:
+                data['notesMarkdown'] = node_.md_attachments[0].text_content
+            if node.url_link_attachments:
+                data['attachments'] = [dict(
+                    id=att.id, location=att.location_adjusted, type=att.att_type.name, name=att.name,
+                    last_modified=att.last_modified.isoformat() if att.last_modified else None)
+                    for att in node_.url_link_attachments]
         if ltype == 'tag':
             tags.append(node_)
         elif ltype != 'of_tag':
-            thoughts.append(node_.data)
+            thoughts.append(data)
             links.append(link.data)
     attachments = [dict(
         id=att.id, location=att.location_adjusted, type=att.att_type.name, name=att.name,
@@ -198,15 +227,21 @@ async def recompose_data(node):
         parents=list(linkst['parent'].keys()),
         siblings=list(linkst['sibling'].keys()),
         children=list(linkst['child'].keys()))
-    return linkst, dict(
+    data = dict(
         root=root, thoughts=thoughts, links=links,
         brainId=node.brain.id, isUserAuthenticated=False, errors=[], stamp=0,
-        status=1, tags=[tag.data for tag in tags], notesHtml="", notesMarkdown="")
+        status=1, tags=[tag.data for tag in tags])
+    if node.html_attachments:
+        data['notesHtml'] = node.html_attachments[0].text_content
+    if node.md_attachments:
+        data['notesMarkdown'] = node.md_attachments[0].text_content
+    return linkst, data
 
 
 @app.route("/brain/<brain_slug>/thought/<thought_id>/")
 async def get_thought_route(brain_slug, thought_id):
-    brain = await get_brain(db.session, brain_slug)
+    session = request.scope['session']
+    brain = await get_brain(session, brain_slug)
     if not brain:
         return Response("No such brain", status=404)
 
@@ -217,7 +252,8 @@ async def get_thought_route(brain_slug, thought_id):
         return redirect(f'/brain/{brain.slug}/thought/{thought_id}/{query_string}', code=302)
 
     force = request.args.get('reload', False)
-    node, data = await get_node(db.session, brain, thought_id, force=force)
+    # add cache_staleness and siblings to query string
+    node, data = await get_node(session, brain, thought_id, force=force)
     if not node:
         return Response("No such thought", status=404)
 
@@ -225,20 +261,29 @@ async def get_thought_route(brain_slug, thought_id):
         # TODO: Give the brain link
         return Response("Private thought", status=403)
 
+    neighbour_notes = request.args.get('neighbour_notes', False)
+    print(neighbour_notes)
     mimetype = request.args.get("mimetype", request.accept_mimetypes.best)
     if mimetype == 'application/json':
-        return data or await recompose_data(node)[1]
+        if data and neighbour_notes:
+            node_ids = [data['root']['id']]+[node['id'] for node in data['thoughts']]
+            links = await db.query(select(Attachment.where(Attachment.node_id.in_(node_ids)), Attachment.att_type==AttachmentType.ExternalUrl).order_by(Attachment.node_id))
+            links_by_id = groupby(links, lambda l: l.node_id)
+            for node in data['thoughts']:
+                if node['id'] in links_by_id:
+                    node['attachments'] = [l.data for l in links_by_id[node['id']]]
+        return data or (await recompose_data(node, neighbour_notes))[1]
     elif mimetype == 'text/csv':
         neighbours = list(await node.get_neighbour_data(
-                db.session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True))
+                session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True))
         reread = False
         for rel, node2, link in neighbours:
             if not node2.read_as_focus:
-                node2 = await get_node(db.session, brain, node2.id, force=True)
+                node2 = await get_node(session, brain, node2.id, force=True)
                 reread = True
         if reread:
             neighbours = await node.get_neighbour_data(
-                db.session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True)
+                session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True)
         si = StringIO()
         cw = csv.writer(si)
         cw.writerow(["Name", "Node_UUID", "Node_Type", "URL", "Notes", "Link_Type", "Link_UUID"])
@@ -257,16 +302,16 @@ async def get_thought_route(brain_slug, thought_id):
     show_query_string = f"?show={show}" if show else ''
 
     if 'json' in show and not data:
-        linkst, data = await recompose_data(node)
+        linkst, data = await recompose_data(node, neighbour_notes)
     else:
         if not data:
             # TODO: Store in node
             root = dict(attachments=[att.id for att in node.attachments])
             data = dict(root=root, notesHtml="", notesMarkdown="", tags=[])
         linkst = dict(parent={}, child={}, sibling={},
-                      jump={}, tag={}, of_tag={})
+                    jump={}, tag={}, of_tag={})
         for (ltype, id, name) in await node.get_neighbour_data(
-                db.session, siblings='siblings' in show):
+                session, siblings='siblings' in show):
             linkst[ltype][id] = name
 
     # create a lookup table of names by thought_id
@@ -306,12 +351,13 @@ async def get_thought_route(brain_slug, thought_id):
 
 @app.route("/brain/<brain_slug>/thought/<thought_id>/.data/md-images/<location>")
 async def get_image_content(brain_slug, thought_id, location):
-    brain = await get_brain(db.session, brain_slug)
+    session = request.scope['session']
+    brain = await get_brain(session, brain_slug)
     if not brain:
         return Response("No such brain", status=404)
     # TODO: use node ID implicit in location?
     # Honour the $width=100p$ parameter
-    att = await db.session.scalar(select(Attachment).filter_by(
+    att = await session.scalar(select(Attachment).filter_by(
         brain=brain,
         node_id=thought_id,
         location=location
@@ -320,7 +366,7 @@ async def get_image_content(brain_slug, thought_id, location):
     # May differ in noteType, but no clear interpretation.
 
     if not att:
-        node, data = await get_node(db.session, brain, thought_id)
+        node, data = await get_node(session, brain, thought_id)
         if not node:
             return Response("No such node", status=404)
 

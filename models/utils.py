@@ -148,11 +148,13 @@ def engine_from_config(_async=True):
     return create_async_engine(url)
 
 
-def get_session(engine=None, _async=True):
+def get_session_maker(engine=None, _async=True, **options):
     engine = engine or engine_from_config(_async)
-    Session = sessionmaker(bind=engine, class_=AsyncSession if _async else None)
-    return Session()
+    return sessionmaker(bind=engine, class_=AsyncSession if _async else None, **options)
 
+def get_session(engine=None, _async=True, **options):
+    smaker = get_session_maker(engine, _async, **options)
+    return smaker()
 
 def populate_brains(session, brains):
     for slug, brain_def in brains.items():

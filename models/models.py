@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     literal,
     Enum,
+    column,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import InterfaceError
@@ -124,9 +125,9 @@ class Brain(Base):
     def safe_slug(self):
         return self.slug or self.id
 
-    async def top_node_id(self, db):
+    async def top_node_id(self, session):
         "The ID of the public node with the most outgoing links."
-        return await db.session.scalar(select(Link.parent_id).filter_by(brain_id=self.id
+        return await session.scalar(select(Link.parent_id).filter_by(brain_id=self.id
             ).join(Node, (Node.id==Link.parent_id) & (Node.private==False)
             ).group_by(Link.parent_id).order_by(count(Link.id).desc()).limit(1))
 
@@ -198,12 +199,13 @@ class Node(Base):
             jumps=True, tags=True, of_tags=True, full=False, text_links=False,
             text_backlinks=False, with_links=False, with_attachments=False):
         queries = []
+        #import pdb; pdb.set_trace()
         entities = [Node] if full else [Node.id, Node.name]
         if with_links:
             entities.append(Link)
         if parents or siblings:
             parent_query = select(
-                literal('parent'), *entities).join(
+                literal('parent').label('reln_type'), *entities).join(
                 Link, Node.child_links).filter(
                 (Link.child_id == self.id) & (Link.relation != LinkRelation.Jump))
             if not private:
@@ -212,32 +214,32 @@ class Node(Base):
             queries.append(parent_query)
         if children:
             query = select(
-                literal('child'), *entities).join(
+                literal('child').label('reln_type'), *entities).join(
                 Link, Node.parent_links).filter(
                 (Link.parent_id == self.id) & (Link.relation != LinkRelation.Jump))
             if not private:
                 query = query.filter(Node.private == False)
             queries.append(query)
         if siblings:
-            subquery = parent_query.with_entities(Node.id).subquery()
+            subquery = parent_query.with_only_columns(Node.id).subquery()
             query = select(
-                literal('sibling'), *entities).join(
+                literal('sibling').label('reln_type'), *entities).join(
                 Link, Node.parent_links).filter(
-                Link.parent_id.in_(subquery) &
+                Link.parent_id.in_(select(subquery)) &
                 (Node.id != self.id) & (Link.relation != LinkRelation.Jump))
             if not private:
                 query = query.filter(Node.private == False)
             queries.append(query)
         if jumps:
             query = select(
-                literal('jump'), *entities).join(
+                literal('jump').label('reln_type'), *entities).join(
                 Link, Node.parent_links).filter(
                 (Link.parent_id == self.id) & (Link.relation == LinkRelation.Jump))
             if not private:
                 query = query.filter(Node.private == False)
             queries.append(query)
             query = select(
-                literal('jump'), *entities).join(
+                literal('jump').label('reln_type'), *entities).join(
                 Link, Node.child_links).filter(
                 (Link.child_id == self.id) & (Link.relation == LinkRelation.Jump))
             if not private:
@@ -245,7 +247,7 @@ class Node(Base):
             queries.append(query)
         if tags and self.tags:
             query = select(
-                literal('tag'), *entities).filter(Node.id.in_(self.tags))
+                literal('tag').label('reln_type'), *entities).filter(Node.id.in_(self.tags))
             if not private:
                 query = query.filter(Node.private == False)
             if with_links:
@@ -253,7 +255,7 @@ class Node(Base):
             queries.append(query)
         if of_tags:
             query = select(
-                literal('of_tag'), *entities).filter(Node.tags.contains([self.id]))
+                literal('of_tag').label('reln_type'), *entities).filter(Node.tags.contains([self.id]))
             if not private:
                 query = query.filter(Node.private == False)
             if with_links:
@@ -261,7 +263,7 @@ class Node(Base):
             queries.append(query)
         if text_links and self.text_links:
             query = select(
-                literal('text_link'), *entities).filter(
+                literal('text_link').label('reln_type'), *entities).filter(
                     Node.id.in_(self.text_links), Node.brain_id==self.brain.id)
             if not private:
                 query = query.filter(Node.private == False)
@@ -270,7 +272,7 @@ class Node(Base):
             queries.append(query)
         if text_backlinks:
             query = select(
-                literal('text_backlink'), *entities).filter(
+                literal('text_backlink').label('reln_type'), *entities).filter(
                     Node.text_links.contains([self.id]), Node.brain_id==self.brain.id)
             if not private:
                 query = query.filter(Node.private == False)
@@ -282,12 +284,14 @@ class Node(Base):
         query = queries.pop()
         if queries:
             query = query.union_all(*queries)
+        query = query.order_by(column("reln_type"), Node.name)
+        if full or with_links:
+            query = select(column("reln_type"), *entities).from_statement(query)
         if with_attachments:
             query = query.options(
                 joinedload(Node.html_attachments),
                 joinedload(Node.md_attachments),
                 subqueryload(Node.url_link_attachments))
-        query = query.order_by(Node.name)
         return await session.execute(query)
 
     @classmethod
