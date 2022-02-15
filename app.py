@@ -192,7 +192,7 @@ async def url():
     )
 
 
-async def recompose_data(node, with_attachments=False, siblings=True):
+async def recompose_data(node, with_attachments=False, siblings=True, gate_counts=False):
     linkst = dict(parent={}, child={}, sibling={}, jump={}, tag={}, of_tag={})
     thoughts = [node.data]
     links = []
@@ -237,6 +237,8 @@ async def recompose_data(node, with_attachments=False, siblings=True):
         data['notesHtml'] = node.html_attachments[0].text_content
     if node.md_attachments:
         data['notesMarkdown'] = node.md_attachments[0].text_content
+    if gate_counts:
+        data['gateCounts'] = await node.gate_counts(session)
     return linkst, data
 
 
@@ -255,7 +257,9 @@ async def get_thought_route(brain_slug, thought_id):
 
     # query args
     show = request.args.get('show', '')
+    show_list = show.split(',')
     show_query_string = f"?show={show}" if show else ''
+    gate_counts = 'gate_counts' in show_list
 
     force = request.args.get('reload', False)
     # add cache_staleness and siblings to query string
@@ -287,7 +291,7 @@ async def get_thought_route(brain_slug, thought_id):
             for node in data['thoughts']:
                 if node['id'] in links_by_id:
                     node['attachments'] = [l.data for l in links_by_id[node['id']]]
-        return data or (await recompose_data(node, neighbour_notes, siblings))[1]
+        return data or (await recompose_data(node, neighbour_notes, siblings, gate_counts))[1]
     elif mimetype == 'text/csv':
         neighbours = list(await node.get_neighbour_data(
                 session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True, siblings=siblings))
@@ -313,7 +317,7 @@ async def get_thought_route(brain_slug, thought_id):
         return output
 
     if 'json' in show and not data:
-        linkst, data = await recompose_data(node, neighbour_notes, siblings)
+        linkst, data = await recompose_data(node, neighbour_notes, siblings, gate_counts)
     else:
         if not data:
             # TODO: Store in node

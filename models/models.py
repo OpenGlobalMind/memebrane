@@ -1,7 +1,7 @@
 from datetime import datetime
 import enum
 from logging import info
-from re import A
+from itertools import groupby
 
 from isodate import parse_datetime
 from sqlalchemy import (
@@ -22,7 +22,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import InterfaceError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func, cast, text
-from sqlalchemy.orm import relationship, deferred, subqueryload, joinedload
+from sqlalchemy.orm import relationship, deferred, subqueryload, joinedload, aliased
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.future import select
 from sqlalchemy.sql.operators import is_distinct_from
@@ -193,6 +193,43 @@ class Node(Base):
         atts = self.url_link_attachments
         if atts:
             return atts[0].location
+
+    async def gate_counts(self, session):
+        sibling_link = aliased(Link)
+        node_id = self.id
+        neighbours = select(cast(node_id, UUID).label('id')).union_all(
+        select(Link.parent_id.label('id')).where(Link.child_id == node_id),
+        select(Link.child_id.label('id')).where(Link.parent_id == node_id),
+        select(Link.child_id.label('id')).join(sibling_link, sibling_link.parent_id == Link.parent_id).where(sibling_link.child_id == node_id)).cte()
+
+        r = await session.execute(select(
+        literal('child').label('reln_type'),
+        Node.id,
+        count(Link.child_id)
+        ).join(Link, Link.parent_id == Node.id
+        ).filter(Node.id.in_(select(neighbours.c.id)), Link.relation != LinkRelation.Jump
+        ).group_by(Node.id).union_all(
+        select(
+            literal('parent').label('reln_type'),
+            Node.id,
+            count(Link.parent_id)
+            ).join(Link, Link.child_id == Node.id
+            ).filter(Node.id.in_(select(neighbours.c.id)), Link.relation != LinkRelation.Jump
+            ).group_by(Node.id),
+        select(
+            literal('jump').label('reln_type'),
+            Node.id,
+            count(Link.child_id)
+            ).join(Link, Link.parent_id == Node.id
+            ).filter(Node.id.in_(select(neighbours.c.id)), Link.relation == LinkRelation.Jump
+            ).group_by(Node.id)).order_by(Node.id, 'reln_type'))
+
+        counts = {}
+
+        for node_id, data in groupby(r, lambda row: row[1]):
+            data = dict([(name, count) for (name, _, count) in data])
+            counts[node_id] = [data.get(name, 0) for name in ('child', 'parent', 'jump')]
+        return counts
 
     async def get_neighbour_data(
             self, session, private=False, parents=True, children=True, siblings=True,
