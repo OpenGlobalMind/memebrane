@@ -5,6 +5,7 @@ from io import StringIO
 import csv
 import os
 from itertools import groupby
+from datetime import timedelta
 
 from quart import Quart, redirect, render_template, request, Response, make_response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -191,14 +192,15 @@ async def url():
     )
 
 
-async def recompose_data(node, with_attachments=False):
+async def recompose_data(node, with_attachments=False, siblings=True):
     linkst = dict(parent={}, child={}, sibling={}, jump={}, tag={}, of_tag={})
     thoughts = [node.data]
     links = []
     tags = []
     session = request.scope['session']
     for ltype, node_, link in await node.get_neighbour_data(
-            session, full=True, with_links=True, with_attachments=with_attachments):
+            session, full=True, with_links=True,
+            with_attachments=with_attachments, siblings=siblings):
         linkst[ltype][node_.id] = node_.name
         data = dict(node_.data)
         if with_attachments:
@@ -251,9 +253,23 @@ async def get_thought_route(brain_slug, thought_id):
                         ) if request.query_string else ''
         return redirect(f'/brain/{brain.slug}/thought/{thought_id}/{query_string}', code=302)
 
+    # query args
+    show = request.args.get('show', '')
+    show_query_string = f"?show={show}" if show else ''
+
     force = request.args.get('reload', False)
     # add cache_staleness and siblings to query string
-    node, data = await get_node(session, brain, thought_id, force=force)
+    cache_staleness = request.args.get('cache_staleness', '1')
+    try:
+        cache_staleness = int(cache_staleness)
+    except:
+        cache_staleness = 1
+    if cache_staleness == 0:
+        force = True
+    else:
+        cache_staleness = timedelta(days=cache_staleness) if cache_staleness > 0 else None
+    node, data = await get_node(session, brain, thought_id, force=force, cache_staleness=cache_staleness)
+    siblings = 'siblings' in show or request.args.get('siblings', True) in ('false', '0', 'no', 'off')
     if not node:
         return Response("No such thought", status=404)
 
@@ -262,20 +278,19 @@ async def get_thought_route(brain_slug, thought_id):
         return Response("Private thought", status=403)
 
     neighbour_notes = request.args.get('neighbour_notes', False)
-    print(neighbour_notes)
     mimetype = request.args.get("mimetype", request.accept_mimetypes.best)
     if mimetype == 'application/json':
         if data and neighbour_notes:
             node_ids = [data['root']['id']]+[node['id'] for node in data['thoughts']]
-            links = await db.query(select(Attachment.where(Attachment.node_id.in_(node_ids)), Attachment.att_type==AttachmentType.ExternalUrl).order_by(Attachment.node_id))
+            links = await session.execute(select(Attachment.where(Attachment.node_id.in_(node_ids)), Attachment.att_type==AttachmentType.ExternalUrl).order_by(Attachment.node_id))
             links_by_id = groupby(links, lambda l: l.node_id)
             for node in data['thoughts']:
                 if node['id'] in links_by_id:
                     node['attachments'] = [l.data for l in links_by_id[node['id']]]
-        return data or (await recompose_data(node, neighbour_notes))[1]
+        return data or (await recompose_data(node, neighbour_notes, siblings))[1]
     elif mimetype == 'text/csv':
         neighbours = list(await node.get_neighbour_data(
-                session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True))
+                session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True, siblings=siblings))
         reread = False
         for rel, node2, link in neighbours:
             if not node2.read_as_focus:
@@ -283,7 +298,7 @@ async def get_thought_route(brain_slug, thought_id):
                 reread = True
         if reread:
             neighbours = await node.get_neighbour_data(
-                session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True)
+                session, full=True, text_links=True, text_backlinks=True, with_links=True, with_attachments=True, siblings=siblings)
         si = StringIO()
         cw = csv.writer(si)
         cw.writerow(["Name", "Node_UUID", "Node_Type", "URL", "Notes", "Link_Type", "Link_UUID"])
@@ -297,12 +312,8 @@ async def get_thought_route(brain_slug, thought_id):
         output.headers["Content-type"] = "text/csv"
         return output
 
-    # get show args
-    show = request.args.get('show', '')
-    show_query_string = f"?show={show}" if show else ''
-
     if 'json' in show and not data:
-        linkst, data = await recompose_data(node, neighbour_notes)
+        linkst, data = await recompose_data(node, neighbour_notes, siblings)
     else:
         if not data:
             # TODO: Store in node
@@ -311,7 +322,7 @@ async def get_thought_route(brain_slug, thought_id):
         linkst = dict(parent={}, child={}, sibling={},
                     jump={}, tag={}, of_tag={})
         for (ltype, id, name) in await node.get_neighbour_data(
-                session, siblings='siblings' in show):
+                session, siblings=siblings):
             linkst[ltype][id] = name
 
     # create a lookup table of names by thought_id
