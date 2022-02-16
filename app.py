@@ -8,16 +8,12 @@ from itertools import groupby
 from datetime import timedelta
 
 from quart import Quart, redirect, render_template, request, Response, make_response
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.sql import func, cast
 from quart_cors import cors
-
 from sqlalchemy.orm import undefer, aliased
-from sqlalchemy.sql import func
 
 from models import mbconfig, text_index_langs, postgres_language_configurations
-from models.models import Node, Brain, Link, Attachment, as_reg_class, AttachmentType
+from models.models import Node, Brain, Link, Attachment, AttachmentType
 from models.utils import (
     get_brain, get_node, add_brain, convert_link, LINK_RE, get_session_maker,
     resolve_html_links, httpx_client)
@@ -116,25 +112,9 @@ async def search(brain_slug):
                     for lang in text_index_langs}
         )
     lang = request.args.get('lang', None)
-    pglang = 'simple'
-    if lang in text_index_langs:
-        pglang = postgres_language_configurations.get(lang, 'simple')
-    txtarg1 = func.to_tsvector(as_reg_class(pglang), Node.name)
-    filter = txtarg1.op('@@')(func.websearch_to_tsquery(as_reg_class(pglang), terms))
-    rank = func.ts_rank(txtarg1, func.websearch_to_tsquery(as_reg_class(pglang), terms), 1)
-    query = session.query(Node.id, Node.name).filter_by(brain=brain, private=False)
     use_notes = request.args.get('notes', None)
     use_notes = use_notes and use_notes.lower() in ['true', 'on', 'checked', 'yes']
-    if use_notes:
-        query = query.outerjoin(Attachment)
-        txtarg2 = func.to_tsvector(as_reg_class(pglang), Attachment.text_content)
-        tfilter = txtarg2.op('@@')(func.websearch_to_tsquery(as_reg_class(pglang), terms))
-        rank = func.coalesce(rank, 0) + 2 * func.coalesce(func.ts_rank_cd(txtarg2, func.websearch_to_tsquery(as_reg_class(pglang), terms), 1), 0)
-        if lang:
-            filter = filter | ((Attachment.inferred_locale == lang) & tfilter)
-        else:
-            filter = filter | tfilter
-    nodes = await session.execute(query.filter(filter).order_by(rank.desc()).offset(start).limit(limit))
+    nodes = await Node.search(session, brain, terms, start, limit, lang, use_notes)
     nodes = list(nodes)
     prev_link = next_link = None
     if len(nodes) == limit:

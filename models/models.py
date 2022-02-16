@@ -398,6 +398,26 @@ class Node(Base):
         self.is_tag = bool(data['kind'] & NodeType.Tag.value)
         self.private = data.get('ACType', 0)
 
+    @classmethod
+    async def search(cls, session, brain, terms, start=0, limit=10, focus=False, lang=None, use_notes=False):
+        pglang = 'simple'
+        if lang in text_index_langs:
+            pglang = postgres_language_configurations.get(lang, 'simple')
+        txtarg1 = func.to_tsvector(as_reg_class(pglang), cls.name)
+        filter = txtarg1.op('@@')(func.websearch_to_tsquery(as_reg_class(pglang), terms))
+        rank = func.ts_rank(txtarg1, func.websearch_to_tsquery(as_reg_class(pglang), terms), 1)
+        query = select(cls.id, cls.name).filter_by(brain=brain, private=False)
+        if use_notes:
+            query = query.outerjoin(Attachment)
+            txtarg2 = func.to_tsvector(as_reg_class(pglang), Attachment.text_content)
+            tfilter = txtarg2.op('@@')(func.websearch_to_tsquery(as_reg_class(pglang), terms))
+            rank = func.coalesce(rank, 0) + 2 * func.coalesce(func.ts_rank_cd(txtarg2, func.websearch_to_tsquery(as_reg_class(pglang), terms), 1), 0)
+            if lang:
+                filter = filter | ((Attachment.inferred_locale == lang) & tfilter)
+            else:
+                filter = filter | tfilter
+        return await session.execute(query.filter(filter).order_by(rank.desc()).offset(start).limit(limit))
+
 
 class Link(Base):
     __tablename__ = "link"
