@@ -144,9 +144,10 @@ async def search(brain_slug):
 
 @app.route("/url", methods=['POST'])
 async def url():
-    url = request.form['url']
-    slug = request.form.get('slug', None)
-    name = request.form.get('name', None)
+    form = await request.form
+    url = form['url']
+    slug = form.get('slug', None)
+    name = form.get('name', None)
 
     # TODO: support URLs of the form https://webbrain.com/brainpage/brain/BED8187E-FD1C-CE55-E236-871DD7E1DF32#-6975
 
