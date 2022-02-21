@@ -416,7 +416,7 @@ class Node(Base):
                 filter = filter | ((Attachment.inferred_locale == lang) & tfilter)
             else:
                 filter = filter | tfilter
-        return await session.execute(query.filter(filter).order_by(rank.desc()).offset(start).limit(limit))
+        return await session.execute(query.filter(filter).order_by(rank.desc(), cls.last_modified.desc()).offset(start).limit(limit))
 
 
 class Link(Base):
