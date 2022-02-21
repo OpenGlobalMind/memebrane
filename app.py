@@ -66,7 +66,8 @@ BRAIN_URL_RE = re.compile(
 @app.route("/brain")
 async def list_brains():
     session = request.scope['session']
-    brains = await session.query(select(Brain))
+    brains = await session.execute(select(Brain))
+    brains = [x for (x,) in brains]
     return await render_template(
         "list_brains.html", brains=brains)
 
