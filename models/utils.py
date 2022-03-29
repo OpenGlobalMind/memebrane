@@ -216,7 +216,7 @@ async def add_to_cache(session, brain_id, data, force=False, graph=True):
                 adata, get_content(adata, data), force=force)
     # TODO: Should I delete absent attachments? only if graph of course
     for adata in attachments.values():
-        await session.add(Attachment.create_from_json(adata, get_content(adata, data)))
+        session.add(Attachment.create_from_json(adata, get_content(adata, data)))
     await session.commit()
 
 
