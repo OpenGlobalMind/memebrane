@@ -188,9 +188,9 @@ async def recompose_data(node, with_attachments=False, siblings=True, gate_count
         if with_attachments:
             if node_.html_attachments:
                 data['notesHtml'] = node_.html_attachments[0].text_content
-            if node.md_attachments:
+            if node_.md_attachments:
                 data['notesMarkdown'] = node_.md_attachments[0].text_content
-            if node.url_link_attachments:
+            if node_.url_link_attachments:
                 data['attachments'] = [dict(
                     id=att.id, location=att.location_adjusted, type=att.att_type.name, name=att.name,
                     last_modified=att.last_modified.isoformat() if att.last_modified else None)

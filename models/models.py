@@ -160,6 +160,9 @@ class Node(Base):
     private = Column(Boolean)
     brain = relationship(Brain, foreign_keys=[brain_id])
     # siblings = relationship("Node", secondary="Link")
+    attachments = relationship("Attachment", back_populates="node")
+    child_links = relationship("Link", foreign_keys="Link.parent_id", back_populates="parent")
+    parent_links = relationship("Link", foreign_keys="Link.child_id", back_populates="child")
 
     def get_html_notes(self):
         atts = self.html_attachments
@@ -437,8 +440,8 @@ class Link(Base):
     child_id = Column(UUID, ForeignKey(
         Node.id, ondelete="CASCADE"), nullable=False, index=True)
     parent = relationship(Node, foreign_keys=[
-                          parent_id], backref="child_links")
-    child = relationship(Node, foreign_keys=[child_id], backref="parent_links")
+                          parent_id], back_populates="child_links")
+    child = relationship(Node, foreign_keys=[child_id], back_populates="parent_links")
 
     @classmethod
     def create_from_json(cls, data):
@@ -497,11 +500,11 @@ class Link(Base):
 Node.children = relationship(
     Node, secondary=Link.__table__,
     primaryjoin=Node.id == Link.parent_id,
-    secondaryjoin=Node.id == Link.child_id)
+    secondaryjoin=Node.id == Link.child_id, viewonly=True)
 Node.parents = relationship(
     Node, secondary=Link.__table__,
     primaryjoin=Node.id == Link.child_id,
-    secondaryjoin=Node.id == Link.parent_id)
+    secondaryjoin=Node.id == Link.parent_id, viewonly=True)
 
 
 class Attachment(Base):
@@ -518,7 +521,7 @@ class Attachment(Base):
     content = deferred(Column(BINARY))
     text_content = Column(Text)
     inferred_locale = Column(String(3))
-    node = relationship(Node, backref="attachments")
+    node = relationship(Node, back_populates="attachments")
     brain = relationship(Brain, foreign_keys=[brain_id])
     __table_args__ = tuple([
         Index("attachment_text_idx",
@@ -625,15 +628,18 @@ class Attachment(Base):
 Node.html_attachments = relationship(
     Attachment, primaryjoin=(Attachment.node_id==Node.id)
     & (Attachment.att_type==AttachmentType.NotesV9)
-    & (Attachment.text_content != None))
+    & (Attachment.text_content != None),
+    viewonly=True)
 
 Node.md_attachments = relationship(
     Attachment, primaryjoin=(Attachment.node_id==Node.id)
     & (Attachment.att_type==AttachmentType.InternalFile)
     & (Attachment.location == "Notes.md")
     & (Attachment.data['noteType'] == func.to_jsonb(4))
-    & (Attachment.text_content != None))
+    & (Attachment.text_content != None),
+    viewonly=True)
 
 Node.url_link_attachments = relationship(
     Attachment, primaryjoin=(Attachment.node_id==Node.id)
-    & (Attachment.att_type==AttachmentType.ExternalUrl))
+    & (Attachment.att_type==AttachmentType.ExternalUrl),
+    viewonly=True)
