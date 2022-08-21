@@ -240,9 +240,11 @@ class Node(Base):
             text_backlinks=False, with_links=False, with_attachments=False):
         queries = []
         #import pdb; pdb.set_trace()
-        entities = [Node] if full else [Node.id, Node.name]
+        node_id = Node.id.label('node_id')
+        node_name = Node.name.label('node_name')
+        entities = [node_id, node_name]
         if with_links:
-            entities.append(Link)
+            entities.append(Link.id.label('link_id'))
         if parents or siblings:
             parent_query = select(
                 literal('parent').label('reln_type'), *entities).join(
@@ -324,15 +326,24 @@ class Node(Base):
         query = queries.pop()
         if queries:
             query = query.union_all(*queries)
-        query = query.order_by(column("reln_type"), Node.name)
-        if full or with_links:
-            query = select(column("reln_type"), *entities).from_statement(query)
-        if with_attachments:
-            query = query.options(
-                joinedload(Node.html_attachments),
-                joinedload(Node.md_attachments),
-                subqueryload(Node.url_link_attachments))
-        return await session.execute(query)
+        query = query.order_by(column("reln_type"), node_name)
+        if full:
+            subq = query.cte()
+            sNode = aliased(Node)
+            sLink = aliased(Link)
+            fentities = [sNode]
+            if with_links:
+                fentities.append(sLink)
+            query = select(subq.c.reln_type, *fentities)
+            query = query.join_from(subq, sNode, sNode.id == subq.c.node_id)
+            if with_links:
+                query = query.join_from(subq, sLink, sLink.id == subq.c.link_id)
+            if with_attachments:
+                query = query.options(
+                    joinedload(sNode.html_attachments),
+                    joinedload(sNode.md_attachments),
+                    subqueryload(sNode.url_link_attachments))
+        return (await session.execute(query)).unique()
 
     @classmethod
     def create_from_json(cls, data, focus=False):
