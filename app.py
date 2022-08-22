@@ -381,3 +381,13 @@ async def get_image_content(brain_slug, thought_id, location):
         return Response(headers={"location":att.brain_uri()}, status=303)
     # TODO: Use /etc/nginx/mime.types, which is fuller, but strip semicolons
     return Response(content, mimetype=guess_type(location, False)[0])
+
+
+@app.route("/brain/<brain_slug>/thought/<thought_id>/notes")
+async def get_notes(brain_slug, thought_id):
+    session = request.scope['session']
+    brain = await get_brain(session, brain_slug)
+    if not brain:
+        return Response("No such brain", status=404)
+    node, data = await get_node(session, brain, thought_id, force=False)
+    return Response(node.get_notes_as_html())
