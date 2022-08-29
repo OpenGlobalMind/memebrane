@@ -237,6 +237,9 @@ async def get_node(session, brain, id, cache_staleness=timedelta(days=1), force=
             if not node:
                 node = await session.scalar(select(Node).filter_by(
                     id=id, brain_id=brain.id))
+        elif node:
+            node.private = True
+            await session.commit()
     return node, data
 
 
