@@ -3,5 +3,9 @@
         "name": "Jerry's Brain",
         "brain": "3d80058c-14d8-5361-0b61-a061f89baf87",
         "thought": "32f9fc36-6963-9ee0-9b44-a89112919e29"
+    },
+    "climate_search": {
+        "name": "Climate Web",
+       	"brain": "307ad935-5650-4701-aefe-a6ee7ad8e0c5"
     }
 }
