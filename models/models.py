@@ -263,7 +263,7 @@ class Node(Base):
                 query = query.filter(Node.private == False)
             queries.append(query)
         if siblings:
-            subquery = parent_query.with_only_columns(Node.id).subquery()
+            subquery = parent_query.filter(not Node.is_type).with_only_columns(Node.id).subquery()
             query = select(
                 literal('sibling').label('reln_type'), *entities).join(
                 Link, Node.parent_links).filter(
