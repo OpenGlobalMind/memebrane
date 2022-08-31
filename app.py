@@ -284,14 +284,14 @@ async def get_thought_route(brain_slug, thought_id):
         return Response("Private thought", status=403)
 
     if mimetype == 'application/json':
-        if data and show_args['with_attachments']:
+        if data and show_vals['with_attachments']:
             node_ids = [data['root']['id']]+[node['id'] for node in data['thoughts']]
             links = await session.execute(select(Attachment.where(Attachment.node_id.in_(node_ids)), Attachment.att_type==AttachmentType.ExternalUrl).order_by(Attachment.node_id))
             links_by_id = groupby(links, lambda l: l.node_id)
             for node in data['thoughts']:
                 if node['id'] in links_by_id:
                     node['attachments'] = [l.data for l in links_by_id[node['id']]]
-        return data or (await recompose_data(node, **show_args))[1]
+        return data or (await recompose_data(node, **show_vals))[1]
     elif mimetype == 'text/csv':
         neighbours = list(await node.get_neighbour_data(session, True, True, **show_vals))
         reread = False
@@ -315,7 +315,7 @@ async def get_thought_route(brain_slug, thought_id):
         return output
 
     if show_json and not data:
-        linkst, data = await recompose_data(node, **show_args)
+        linkst, data = await recompose_data(node, **show_vals)
     else:
         if not data:
             # TODO: Store in node
