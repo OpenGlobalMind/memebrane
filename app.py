@@ -225,7 +225,7 @@ async def recompose_data(node, with_attachments=False, siblings=True, gate_count
 
 
 show_args = {
-    'json', 'gate_counts', 'siblings', 'parents', 'children', 'neighbour_notes',
+    'json', 'gate_counts', 'siblings', 'parents', 'children',
     'jumps', 'tags', 'of_tags', 'text_links',
     'text_backlinks', 'with_attachments', 'same_type'}
 show_defaults = {'parents', 'children', 'siblings', 'jumps', 'tags', 'of_tags'}
@@ -258,7 +258,6 @@ async def get_thought_route(brain_slug, thought_id):
     show_vals.update({arg: val not in ('false', '0', 'no', 'off') for (arg, val) in request.args.items() if arg in show_list})
     # accept arguments of the form: show=arg,-arg,...
     show_vals.update({arg.strip('-'): arg[0] != '-' for arg in show_defaults.keys() if arg.strip('-') in show_list})
-    show_vals['with_attachments'] |= show_vals.pop('neighbour_notes')  # legacy
     non_default = {arg: val for (arg, val) in show_vals.items() if val != my_show_defaults[arg]}
     show_query_string = "?show=" + ",".join([('' if val else '-')+arg for (arg, val) in non_default.items()])
     show_json = show_vals.pop('json')
