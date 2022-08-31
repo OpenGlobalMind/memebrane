@@ -111,6 +111,18 @@ class AttachmentType(enum.Enum):
     MarkdownImage = 12
 
 
+class MyLinkTypes(enum.Enum):
+    parents = "parents"
+    children = "children"
+    siblings = "siblings"
+    jumps = "jumps"
+    tags = "tags"
+    of_tags = "of_tags"
+    text_links = "text_links"
+    text_backlinks = "text_backlinks"
+    same_type = "same_type"
+
+
 Base = declarative_base()
 
 
@@ -235,9 +247,10 @@ class Node(Base):
         return counts
 
     async def get_neighbour_data(
-            self, session, private=False, parents=True, children=True, siblings=True,
-            jumps=True, tags=True, of_tags=True, full=False, text_links=False,
-            text_backlinks=False, with_links=False, with_attachments=False):
+            self, session, full=False, with_links=False, private=False,
+            parents=True, children=True, siblings=True,
+            jumps=True, tags=True, of_tags=True, text_links=False,
+            text_backlinks=False, with_attachments=False, same_type=False):
         queries = []
         #import pdb; pdb.set_trace()
         node_id = Node.id.label('node_id')
@@ -245,7 +258,7 @@ class Node(Base):
         entities = [node_id, node_name]
         if with_links:
             entities.append(Link.id.label('link_id'))
-        if parents or siblings:
+        if parents or siblings or same_type:
             parent_query = select(
                 literal('parent').label('reln_type'), *entities).join(
                 Link, Node.child_links).filter(
@@ -266,6 +279,16 @@ class Node(Base):
             subquery = parent_query.filter(Node.is_type == False).with_only_columns(Node.id).subquery()
             query = select(
                 literal('sibling').label('reln_type'), *entities).join(
+                Link, Node.parent_links).filter(
+                Link.parent_id.in_(select(subquery)) &
+                (Node.id != self.id) & (Link.relation != LinkRelation.Jump))
+            if not private:
+                query = query.filter(Node.private == False)
+            queries.append(query)
+        if same_type:
+            subquery = parent_query.filter(Node.is_type == True).with_only_columns(Node.id).subquery()
+            query = select(
+                literal('same_type').label('reln_type'), *entities).join(
                 Link, Node.parent_links).filter(
                 Link.parent_id.in_(select(subquery)) &
                 (Node.id != self.id) & (Link.relation != LinkRelation.Jump))

@@ -25,10 +25,19 @@
       <h1>{{ node.name }}
         {% if is_tag %} <i>(Tag)</i>{% endif %}
         {% if is_type %} <i>(Type)</i>{% endif %}</h1>
-      {% if 'siblings' in show and siblings %}
+      {% if show_vals['siblings'] and siblings %}
 	<p>
 	  Siblings:
 	  {% for id, name in siblings.items() %}
+	  {% if loop.index > 1 %} - {% endif %}
+	  <a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}/{{ show_query_string }}">{{ name }}</a>
+	  {% endfor %}
+	</p>
+      {% endif %}
+      {% if show_vals['same_type'] and same_type %}
+	<p>
+	  Other nodes of this type:
+	  {% for id, name in same_type.items() %}
 	  {% if loop.index > 1 %} - {% endif %}
 	  <a href="/brain/{{ brain.safe_slug }}/thought/{{ id }}/{{ show_query_string }}">{{ name }}</a>
 	  {% endfor %}
@@ -85,7 +94,7 @@
 	</div>
 	{% endfor %}
       </p>
-      {% if 'json' in show %}
+      {% if show_vals['json'] %}
 	<p>
 	  JSON:
 	  <pre>
